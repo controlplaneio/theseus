@@ -159,8 +159,9 @@ main() {
 
     ${APP} test/theseus/asset/reviews-deployment-v2.yaml \
       ${DEBUG} \
-      --user-agent '.*' \
+      --cookie choc-chip \
       --test "test \$(curl -A 'Mozilla/4.0' --compressed --connect-timeout 5 \
+     --header 'cookie: choc-chip' \
      --max-time 5  \"http://\${GATEWAY_URL}/productpage\" \
      | grep -o '\bglyphicon-star\b' \
      | wc -l) -ge 10"
@@ -172,8 +173,9 @@ main() {
 
     ${APP} test/theseus/asset/reviews-deployment-v3.yaml \
       ${DEBUG} \
-      --user-agent '.*' \
+      --cookie rasperry \
       --test "test \$(curl -A 'Mozilla/4.0' --compressed --connect-timeout 5 \
+     --header 'cookie: raspberry' \
      --max-time 5  \"http://\${GATEWAY_URL}/productpage\" \
      | grep '\bglyphicon-star\b' \
      | grep --fixed-strings '<font color=\"red\">' \
