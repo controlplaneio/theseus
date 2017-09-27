@@ -1,0 +1,35 @@
+image: sublimino/alpine-base:latest
+
+stages:
+  - test
+  - deploy
+
+cache:
+  untracked: true
+  paths:
+  - /root/.npm
+  - node_modules/
+
+before_script:
+  - export PATH="node_modules/.bin/:$PATH"
+  - npm config set cache-min 31540000
+  - npm i sublimino/rollcage
+
+duplicate-remote:
+  stage: test
+  script:
+    - rollcage git-backup
+
+test:
+  stage: test
+  script:
+    - test/test-remote.sh
+  artifacts:
+    when: always
+    expire_in: '6 mos 1 day'
+    untracked: true
+
+deploy:
+  stage: deploy
+  script:
+    - echo './deploy.sh not running'

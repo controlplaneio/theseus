@@ -1,0 +1,18 @@
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: beefjerky-v90
+spec:
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: beefjerky
+        version: v90
+    spec:
+      containers:
+      - name: reviews
+        image: istio/examples-bookinfo-reviews-v1
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 9080

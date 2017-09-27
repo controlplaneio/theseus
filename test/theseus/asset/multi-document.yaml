@@ -1,0 +1,38 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: ghost
+  labels:
+    app: ghost
+spec:
+  ports:
+  - port: 80
+    name: http
+    targetPort: 2368
+  selector:
+    app: ghost
+---
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: ghost-v1
+spec:
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: ghost
+        version: v1
+    spec:
+      containers:
+      - name: ghost
+        image: registry.binarysludge.com/sublimino/ghost-k8s:latest
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 2368
+        env:
+           - name: NODE_ENV
+             value: "production"
+           - name: GHOST_URL
+             value: 'www.err.systems'
+
