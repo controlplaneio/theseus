@@ -1,9 +1,10 @@
 # theseus
-Continuous Zero-Downtime Deployments for Kubernetes & Istio.
+Continuous Zero-Downtime Deployments for Kubernetes & Istio
 
-A poor man's Kubernetes-native [Spinnaker](https://www.spinnaker.io/).
+A poor man's Kubernetes-native [Spinnaker](https://www.spinnaker.io/)
 
-Named after [Theseus's paradox](https://en.wikipedia.org/wiki/Ship_of_Theseus)
+Named after [Theseus's paradox](https://en.wikipedia.org/wiki/Ship_of_Theseus):
+
 > does an object that has had all of its components replaced remain fundamentally the same object?
 
 ## About
