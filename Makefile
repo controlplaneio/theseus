@@ -1,6 +1,9 @@
-SHELL:=/bin/bash
-PACKAGE=github.com/controlplane/theseus/cmd
-DEP:=$(shell command -v dep 2>/dev/null)
+SHELL := /bin/bash
+PACKAGE = github.com/controlplane/theseus/cmd
+HAS_DEP := $(shell command -v dep 2>/dev/null)
+
+.PHONY: build container dep dev local test test test-acceptance test-unit
+.SILENT:
 
 all:
 	make dep
@@ -87,9 +90,6 @@ release:
 		$$(git describe --tags)
 
 get-dep:
-ifndef DEP
+ifndef HAS_DEP
 	go get -u github.com/golang/dep/cmd/dep
 endif
-
-.PHONY : dev dep build test container local test test-acceptance test-unit
-.SILENT:
