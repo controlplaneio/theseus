@@ -77,11 +77,16 @@ main() {
   export GATEWAY_URL
 
   if [[ "${IS_MINIKUBE}" == 1 ]]; then
-    # TODO(ajm): this is broken
-    GATEWAY_URL=$(kubectl get po -l istio=ingress -o 'jsonpath={.items[0].status.hostIP}'):$(kubectl get svc istio-ingress -o 'jsonpath={.spec.ports[0].nodePort}')
-
+    GATEWAY_URL=$(kubectl get po \
+      --namespace istio-system \
+      -l istio=ingress \
+      -o 'jsonpath={.items[0].status.hostIP}'):$(kubectl get svc \
+      --namespace istio-system \
+      istio-ingress \
+      -o 'jsonpath={.spec.ports[0].nodePort}')
   else
-    GATEWAY_URL=$(kubectl get ingress gateway -o 'jsonpath={.status.loadBalancer.ingress[].ip}')
+    GATEWAY_URL=$(kubectl get ingress gateway \
+      -o 'jsonpath={.status.loadBalancer.ingress[].ip}')
     wait_for_ingress_ip
   fi
 
@@ -122,7 +127,6 @@ main() {
       --selector=weave-scope-component=app -o jsonpath='{.items..metadata.name}')" 4040 &
     disown $! || true
   fi
-
 }
 
 istio_apply() {
