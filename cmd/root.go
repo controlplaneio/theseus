@@ -20,6 +20,8 @@ import (
   homedir "github.com/mitchellh/go-homedir"
   "github.com/spf13/cobra"
   "github.com/spf13/viper"
+  "github.com/op/go-logging"
+  "gopkg.in/yaml.v2"
 )
 
 var cfgFile string
@@ -29,24 +31,24 @@ var gitHash = "unknown"
 var buildVersion = "unknown"
 
 var (
-  isVersionFlag  bool = false
-  timeoutSeconds int
-  tag            string
-  tagName        string
-  weight         string
-  precedence     string
-  name           string
-  header         string
-  regex          string
-  cookie         string
-  userAgent      string
-  testUrl        string
-  test           string
-  backup         bool
-  undeploy       string
-  delete         bool
-  debug          bool
-  dryRun         bool
+  isVersionFlag    bool = false
+  timeoutSeconds   int
+  tag              string
+  tagName          string
+  weight           string
+  precedence       string
+  name             string
+  header           string
+  regex            string
+  cookie           string
+  userAgent        string
+  testUrl          string
+  test             string
+  backup           bool
+  undeploy         string
+  deleteDeployment bool
+  debug            bool
+  dryRun           bool
 
   RootCmd = &cobra.Command{
     Use:   "theseus",
@@ -58,15 +60,60 @@ This project is currently in alpha, feedback and PRs welcome.`,
       theseus(cmd, args)
     },
   }
+
+  log    = logging.MustGetLogger("example")
 )
 
+func setupLogging() {
+
+  format := logging.MustStringFormatter(
+    `%{color}%{time:15:04:05.000} %{shortfunc} ▶ %{level:.4s} %{id:03x}%{color:reset} %{message}`,
+  )
+
+  logBackend := logging.NewLogBackend(os.Stderr, "", 0)
+  backendFormatter := logging.NewBackendFormatter(logBackend, format)
+  backendLeveled := logging.AddModuleLevel(backendFormatter)
+
+  //backendLeveled.SetLevel(logging.ERROR, "")
+  backendLeveled.SetLevel(logging.INFO, "")
+
+  logging.SetBackend(backendLeveled)
+}
+
 func theseus(cmd *cobra.Command, args []string) {
+
+  setupLogging()
 
   if isVersionFlag {
     fmt.Fprintf(os.Stderr, "%s %s (build %s %s)\n", os.Args[0], buildVersion, gitHash, buildStamp)
     os.Exit(0)
   }
 
+  log.Info("  check_kubernetes_version")
+  log.Info("  check_istio_version")
+  log.Info("  check_for_autoscaler")
+  log.Info("  if IS_DELETE - delete_route_and_deployment")
+  log.Info("  get highest precedence")
+
+  log.Info("  generate_route")
+  log.Info("  trap 'rollback' EXIT")
+  log.Info("  deploy_resource ${FILENAME}")
+
+  log.Info("  if ! wait_for_deployment Deployment failed, rolling back")
+  log.Info("  deploy_rule_safe")
+
+  log.Info("  if ! test_resource; then Deployment failed, rolling back")
+  log.Info("  deploy_rule_full_rollout")
+
+  log.Info("  if ! test_resource; then Deployment failed during full rollout, rolling back")
+
+  log.Info("  undeploy_previous_deployment")
+  log.Info("  trap - EXIT")
+  log.Info("  undeploy_deployment")
+
+  log.Info("  Deployment of ${FILENAME} succeeded in ${SECONDS}")
+
+  os.Exit(1)
 }
 
 // Execute adds all child commands to the root command and sets flags appropriately.
@@ -157,8 +204,8 @@ func init() {
     "",
     "",
     `Script or command to eval to test deployment
-                                                        The environment variable GATEWAY_URL is available
-                                                        e.g. --test "curl --fail \${GATEWAY_URL}`,
+														The environment variable GATEWAY_URL is available
+														e.g. --test "curl --fail \${GATEWAY_URL}`,
   )
   RootCmd.PersistentFlags().BoolVarP(
     &backup,
@@ -175,8 +222,8 @@ func init() {
     "undeploy - TODO",
   )
   RootCmd.PersistentFlags().BoolVarP(
-    &delete,
-    "delete",
+    &deleteDeployment,
+    "deleteDeployment",
     "",
     false,
     "Remove existing deployment and route",
@@ -205,8 +252,6 @@ func init() {
     false,
     "Version",
   )
-
-
 
   //RootCmd.PersistentFlags().BoolVarP(
   //  &isStdLib,
