@@ -31,6 +31,18 @@ Currently missing from diagram:
 
 ![Sequence Diagram](./sequence-diagram.png)
 
+# Developing Theseus
+
+If you wish to work on Theseus, you'll first need [Go](http://www.golang.org) installed on your machine (version 1.9+ is *required*). Alternatively, you can use the provided docker containers provided with appropriate development tooling already set up for you.
+
+For local development of Theseus, first make sure Go is properly installed and that a [GOPATH](http://golang.org/doc/code.html#GOPATH) has been set. You will also need to add `$GOPATH/bin` to your `$PATH`.
+
+Next, using [Git](https://git-scm.com/), clone this repository into `$GOPATH/src/github.com/controlplaneio/theseus`. All the necessary dependencies are either vendored or automatically installed, so you just need to type `make`. This will compile the code and then run the tests. If this exits with exit status 0, then everything is working!
+
+```sh
+$ cd "$GOPATH/src/github.com/controlplaneio/theseus"
+$ make
+```
 
 # TODO
 
