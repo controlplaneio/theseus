@@ -1,7 +1,6 @@
 SHELL:=/bin/bash
 PACKAGE=github.com/controlplane/theseus/cmd
-.phony : dev dep build test container local
-.SILENT:
+DEP:=$(shell command -v dep 2>/dev/null)
 
 all:
 	make dep
@@ -27,12 +26,13 @@ dep-safe:
 			echo "Attempting to remedy gopkg.in/yaml.v2"; \
 			rm -rf $$(pwd)/vendor/gopkg.in/yaml.v2; \
 			go get -v gopkg.in/yaml.v2 && \
+				mkdir -p $$(pwd)/vendor/gopkg.in && \
 				ln -s $${GOPATH}/src/gopkg.in/yaml.v2 $$(pwd)/vendor/gopkg.in/ && \
 				make test; \
 		}; \
 	'
 
-dep:
+dep: get-dep
 	dep ensure -v
 
 prune:
@@ -86,6 +86,10 @@ release:
 			| grep -iEv '^(build|refactor):')" \
 		$$(git describe --tags)
 
-.PHONY : test test-acceptance test-unit
-.SILENT:
+get-dep:
+ifndef DEP
+	go get -u github.com/golang/dep/cmd/dep
+endif
 
+.PHONY : dev dep build test container local test test-acceptance test-unit
+.SILENT:
