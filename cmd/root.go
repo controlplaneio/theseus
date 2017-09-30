@@ -14,14 +14,17 @@
 package cmd
 
 import (
-  "fmt"
-  "os"
+	"fmt"
+	"os"
+	"os/exec"
 
-  homedir "github.com/mitchellh/go-homedir"
-  "github.com/spf13/cobra"
-  "github.com/spf13/viper"
-  "github.com/op/go-logging"
-  "gopkg.in/yaml.v2"
+	"strings"
+
+	"github.com/mitchellh/go-homedir"
+	logging "github.com/op/go-logging"
+	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
+	"gopkg.in/yaml.v2"
 )
 
 var cfgFile string
@@ -31,272 +34,337 @@ var gitHash = "unknown"
 var buildVersion = "unknown"
 
 var (
-  isVersionFlag    bool = false
-  timeoutSeconds   int
-  tag              string
-  tagName          string
-  weight           string
-  precedence       string
-  name             string
-  header           string
-  regex            string
-  cookie           string
-  userAgent        string
-  testUrl          string
-  test             string
-  backup           bool
-  undeploy         string
-  deleteDeployment bool
-  debug            bool
-  dryRun           bool
+	istioctlPath = "istioctl"
+	kubectlPath  = "kubectl"
 
-  RootCmd = &cobra.Command{
-    Use:   "theseus",
-    Short: "Continuous Zero-Downtime Deployments for Kubernetes & Istio",
-    Long: `Perform continually-tested and monitored roll-outs to a Kubernetes microservice application.
+	isVersionFlag    bool = false
+	timeoutSeconds   int
+	tag              string
+	tagName          string
+	weight           string
+	precedence       string
+	name             string
+	header           string
+	regex            string
+	cookie           string
+	userAgent        string
+	testUrl          string
+	test             string
+	backup           bool
+	undeploy         string
+	deleteDeployment bool
+	debug            bool
+	dryRun           bool
+
+	RootCmd = &cobra.Command{
+		Use:   "theseus",
+		Short: "Continuous Zero-Downtime Deployments for Kubernetes & Istio",
+		Long: `Perform continually-tested and monitored roll-outs to a Kubernetes microservice application.
 
 This project is currently in alpha, feedback and PRs welcome.`,
-    Run: func(cmd *cobra.Command, args []string) {
-      theseus(cmd, args)
-    },
-  }
+		Run: func(cmd *cobra.Command, args []string) {
+			theseus(cmd, args)
+		},
+	}
 
-  log    = logging.MustGetLogger("example")
+	log = logging.MustGetLogger("example")
 )
+
+type RouteRule struct {
+	APIVersion string `yaml:"apiVersion"`
+	Kind       string `yaml:"kind"`
+	Metadata   struct {
+		Name string `yaml:"name"`
+	} `yaml:"metadata"`
+	Spec struct {
+		Destination struct {
+			Name string `yaml:"name"`
+		} `yaml:"destination"`
+		Match struct {
+			Request struct {
+				Headers struct {
+					Cookie struct {
+						Regex string `yaml:"regex"`
+					} `yaml:"cookie"`
+				} `yaml:"headers"`
+			} `yaml:"request"`
+		} `yaml:"match"`
+		Precedence int `yaml:"precedence"`
+		Route      []struct {
+			Labels struct {
+				Version string `yaml:"version"`
+			} `yaml:"labels"`
+		} `yaml:"route"`
+	} `yaml:"spec"`
+}
 
 func setupLogging() {
 
-  format := logging.MustStringFormatter(
-    `%{color}%{time:15:04:05.000} %{shortfunc} ▶ %{level:.4s} %{id:03x}%{color:reset} %{message}`,
-  )
+	format := logging.MustStringFormatter(
+		`%{color}%{time:15:04:05.000} %{shortfunc} ▶ %{level:.4s} %{id:03x}%{color:reset} %{message}`,
+	)
 
-  logBackend := logging.NewLogBackend(os.Stderr, "", 0)
-  backendFormatter := logging.NewBackendFormatter(logBackend, format)
-  backendLeveled := logging.AddModuleLevel(backendFormatter)
+	logBackend := logging.NewLogBackend(os.Stderr, "", 0)
+	backendFormatter := logging.NewBackendFormatter(logBackend, format)
+	backendLeveled := logging.AddModuleLevel(backendFormatter)
 
-  //backendLeveled.SetLevel(logging.ERROR, "")
-  backendLeveled.SetLevel(logging.INFO, "")
+	//backendLeveled.SetLevel(logging.ERROR, "")
+	backendLeveled.SetLevel(logging.INFO, "")
 
-  logging.SetBackend(backendLeveled)
+	logging.SetBackend(backendLeveled)
 }
 
 func theseus(cmd *cobra.Command, args []string) {
 
-  setupLogging()
+	setupLogging()
 
-  if isVersionFlag {
-    fmt.Fprintf(os.Stderr, "%s %s (build %s %s)\n", os.Args[0], buildVersion, gitHash, buildStamp)
-    os.Exit(0)
-  }
+	if isVersionFlag {
+		fmt.Fprintf(os.Stderr, "%s %s (build %s %s)\n", os.Args[0], buildVersion, gitHash, buildStamp)
+		os.Exit(0)
+	}
 
-  log.Info("  check_kubernetes_version")
-  log.Info("  check_istio_version")
-  log.Info("  check_for_autoscaler")
-  log.Info("  if IS_DELETE - delete_route_and_deployment")
-  log.Info("  get highest precedence")
+	log.Info("check_kubernetes_version")
+	log.Info("check_istio_version")
+	log.Info("check_for_autoscaler")
+	log.Info("if IS_DELETE - delete_route_and_deployment")
+	log.Info("get highest precedence")
 
-  log.Info("  generate_route")
-  log.Info("  trap 'rollback' EXIT")
-  log.Info("  deploy_resource ${FILENAME}")
+	log.Info("generate_route")
+	log.Info("trap 'rollback' EXIT")
+	log.Info("deploy_resource ${FILENAME}")
 
-  log.Info("  if ! wait_for_deployment Deployment failed, rolling back")
-  log.Info("  deploy_rule_safe")
+	log.Info("if ! wait_for_deployment Deployment failed, rolling back")
+	log.Info("deploy_rule_safe")
 
-  log.Info("  if ! test_resource; then Deployment failed, rolling back")
-  log.Info("  deploy_rule_full_rollout")
+	log.Info("if ! test_resource; then Deployment failed, rolling back")
+	log.Info("deploy_rule_full_rollout")
 
-  log.Info("  if ! test_resource; then Deployment failed during full rollout, rolling back")
+	log.Info("if ! test_resource; then Deployment failed during full rollout, rolling back")
 
-  log.Info("  undeploy_previous_deployment")
-  log.Info("  trap - EXIT")
-  log.Info("  undeploy_deployment")
+	log.Info("undeploy_previous_deployment")
+	log.Info("trap - EXIT")
+	log.Info("undeploy_deployment")
 
-  log.Info("  Deployment of ${FILENAME} succeeded in ${SECONDS}")
+	log.Info("Deployment of ${FILENAME} succeeded in ${SECONDS}")
 
-  os.Exit(1)
+	os.Exit(1)
 }
 
-// Execute adds all child commands to the root command and sets flags appropriately.
-// This is called by main.main(). It only needs to happen once to the rootCmd.
+func callIstioctl(command ...string) string {
+	return callBinary(istioctlPath, command)
+}
+
+func callKubectl(command ...string) string {
+	return callBinary(kubectlPath, command)
+}
+
+func checkIsBinaryInPath(pathToBinary string) {
+	_, lookErr := exec.LookPath(pathToBinary)
+	if lookErr != nil {
+		panic(lookErr)
+	}
+}
+
+func callBinary(binary string, command []string) string {
+	if len(command) == 0 {
+		command = []string{"version"}
+	}
+	checkIsBinaryInPath(binary)
+
+	commandString := binary + " " + strings.Join(command[:], " ")
+	shellCommand := exec.Command("bash", "-c", commandString)
+	shellOutput, err := shellCommand.Output()
+	if err != nil {
+		panic(err)
+	}
+	return string(shellOutput)
+}
+
+func getRouteRule(routeruleYaml string) RouteRule {
+	routerule := RouteRule{}
+	err := yaml.Unmarshal([]byte(routeruleYaml), &routerule)
+	if err != nil {
+		panic(err)
+	}
+	//log.Info("--- t:\n%+v\n\n", routerule)
+	return routerule
+}
+
+func getHighestPrecedence() int {
+
+	return 100
+}
+
+// ---
+
 func Execute() {
-  if err := RootCmd.Execute(); err != nil {
-    fmt.Println(err)
-    os.Exit(1)
-  }
+	if err := RootCmd.Execute(); err != nil {
+		fmt.Println(err)
+		os.Exit(1)
+	}
 }
 
 func init() {
-  cobra.OnInitialize(initConfig)
+	cobra.OnInitialize(initConfig)
 
-  RootCmd.PersistentFlags().StringVarP(
-    &tag,
-    "tag",
-    "",
-    "",
-    "Value to pod to route to (.metadata.labels, required)",
-  )
-  RootCmd.PersistentFlags().StringVarP(
-    &tagName,
-    "tagName",
-    "",
-    "",
-    "New tag of service to deploy (from .metadata.labels, default: version)",
-  )
-  RootCmd.PersistentFlags().StringVarP(
-    &weight,
-    "weight",
-    "",
-    "",
-    "Percentage of traffic to redirect to tag",
-  )
-  RootCmd.PersistentFlags().StringVarP(
-    &precedence,
-    "precedence",
-    "",
-    "",
-    "Precedence (default: 10)",
-  )
-  RootCmd.PersistentFlags().StringVarP(
-    &name,
-    "name",
-    "",
-    "",
-    "Rule name (default: `destination`-test-`tag`)",
-  )
-  RootCmd.PersistentFlags().StringVarP(
-    &header,
-    "header",
-    "",
-    "",
-    "HTTP header to route on",
-  )
-  RootCmd.PersistentFlags().StringVarP(
-    &regex,
-    "regex",
-    "",
-    "",
-    "An inclusion regex to apply to the HTTP header",
-  )
-  RootCmd.PersistentFlags().StringVarP(
-    &cookie,
-    "cookie",
-    "",
-    "",
-    "Implies `--header cookie --regex [regex]`",
-  )
-  RootCmd.PersistentFlags().StringVarP(
-    &userAgent,
-    "userAgent",
-    "",
-    "",
-    "Implies `--header user-agent --regex [regex]`",
-  )
-  RootCmd.PersistentFlags().StringVarP(
-    &testUrl,
-    "testUrl",
-    "",
-    "",
-    "URL to test deployment by `curl`-ing for status 200",
-  )
-  RootCmd.PersistentFlags().StringVarP(
-    &test,
-    "test",
-    "",
-    "",
-    `Script or command to eval to test deployment
+	RootCmd.PersistentFlags().StringVarP(
+		&tag,
+		"tag",
+		"",
+		"",
+		"Value to pod to route to (.metadata.labels, required)",
+	)
+	RootCmd.PersistentFlags().StringVarP(
+		&tagName,
+		"tagName",
+		"",
+		"",
+		"New tag of service to deploy (from .metadata.labels, default: version)",
+	)
+	RootCmd.PersistentFlags().StringVarP(
+		&weight,
+		"weight",
+		"",
+		"",
+		"Percentage of traffic to redirect to tag",
+	)
+	RootCmd.PersistentFlags().StringVarP(
+		&precedence,
+		"precedence",
+		"",
+		"",
+		"Precedence (default: 10)",
+	)
+	RootCmd.PersistentFlags().StringVarP(
+		&name,
+		"name",
+		"",
+		"",
+		"Rule name (default: `destination`-test-`tag`)",
+	)
+	RootCmd.PersistentFlags().StringVarP(
+		&header,
+		"header",
+		"",
+		"",
+		"HTTP header to route on",
+	)
+	RootCmd.PersistentFlags().StringVarP(
+		&regex,
+		"regex",
+		"",
+		"",
+		"An inclusion regex to apply to the HTTP header",
+	)
+	RootCmd.PersistentFlags().StringVarP(
+		&cookie,
+		"cookie",
+		"",
+		"",
+		"Implies `--header cookie --regex [regex]`",
+	)
+	RootCmd.PersistentFlags().StringVarP(
+		&userAgent,
+		"userAgent",
+		"",
+		"",
+		"Implies `--header user-agent --regex [regex]`",
+	)
+	RootCmd.PersistentFlags().StringVarP(
+		&testUrl,
+		"testUrl",
+		"",
+		"",
+		"URL to test deployment by `curl`-ing for status 200",
+	)
+	RootCmd.PersistentFlags().StringVarP(
+		&test,
+		"test",
+		"",
+		"",
+		`Script or command to eval to test deployment
 														The environment variable GATEWAY_URL is available
 														e.g. --test "curl --fail \${GATEWAY_URL}`,
-  )
-  RootCmd.PersistentFlags().BoolVarP(
-    &backup,
-    "backup",
-    "",
-    false,
-    "Backup existing deployment",
-  )
-  RootCmd.PersistentFlags().StringVarP(
-    &undeploy,
-    "undeploy",
-    "",
-    "",
-    "undeploy - TODO",
-  )
-  RootCmd.PersistentFlags().BoolVarP(
-    &deleteDeployment,
-    "deleteDeployment",
-    "",
-    false,
-    "Remove existing deployment and route",
-  )
-  RootCmd.PersistentFlags().BoolVarP(
-    &debug,
-    "debug",
-    "",
-    false,
-    "More debug",
-  )
-  RootCmd.PersistentFlags().BoolVarP(
-    &dryRun,
-    "dryRun",
-    "",
-    false,
-    "Dry-run; only show what would be done",
-  )
+	)
+	RootCmd.PersistentFlags().BoolVarP(
+		&backup,
+		"backup",
+		"",
+		false,
+		"Backup existing deployment",
+	)
+	RootCmd.PersistentFlags().StringVarP(
+		&undeploy,
+		"undeploy",
+		"",
+		"",
+		"undeploy - TODO",
+	)
+	RootCmd.PersistentFlags().BoolVarP(
+		&deleteDeployment,
+		"deleteDeployment",
+		"",
+		false,
+		"Remove existing deployment and route",
+	)
+	RootCmd.PersistentFlags().BoolVarP(
+		&debug,
+		"debug",
+		"",
+		false,
+		"More debug",
+	)
+	RootCmd.PersistentFlags().BoolVarP(
+		&dryRun,
+		"dryRun",
+		"",
+		false,
+		"Dry-run; only show what would be done",
+	)
 
-  // ---
+	// ---
 
-  RootCmd.PersistentFlags().BoolVarP(
-    &isVersionFlag,
-    "version",
-    "v",
-    false,
-    "Version",
-  )
+	RootCmd.PersistentFlags().BoolVarP(
+		&isVersionFlag,
+		"version",
+		"v",
+		false,
+		"Version",
+	)
 
-  //RootCmd.PersistentFlags().BoolVarP(
-  //  &isStdLib,
-  //  "stdlib",
-  //  "s",
-  //  false,
-  //  "Use the Go standard rexexp library",
-  //)
-  RootCmd.PersistentFlags().IntVarP(
-    &timeoutSeconds,
-    "timeout",
-    "",
-    0,
-    "Total execution timeout",
-  )
+	RootCmd.PersistentFlags().IntVarP(
+		&timeoutSeconds,
+		"timeout",
+		"",
+		0,
+		"Total execution timeout",
+	)
 
-  RootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default is $HOME/.theseus.yaml)")
-
-  // Cobra also supports local flags, which will only run
-  // when this action is called directly.
-  //RootCmd.Flags().BoolP("toggle", "t", false, "Help message for toggle")
+	RootCmd.PersistentFlags().StringVar(
+		&cfgFile,
+		"config",
+		"",
+		"config file (default is $HOME/.theseus.yaml)",
+	)
 }
 
-// initConfig reads in config file and ENV variables if set.
 func initConfig() {
-  if cfgFile != "" {
-    // Use config file from the flag.
-    viper.SetConfigFile(cfgFile)
-  } else {
-    // Find home directory.
-    home, err := homedir.Dir()
-    if err != nil {
-      fmt.Println(err)
-      os.Exit(1)
-    }
+	if cfgFile != "" {
+		viper.SetConfigFile(cfgFile)
+	} else {
+		home, err := homedir.Dir()
+		if err != nil {
+			fmt.Println(err)
+			os.Exit(1)
+		}
 
-    // Search config in home directory with name ".theseus" (without extension).
-    viper.AddConfigPath(home)
-    viper.SetConfigName(".theseus")
-  }
+		viper.AddConfigPath(home)
+		viper.SetConfigName(".theseus")
+	}
 
-  viper.AutomaticEnv() // read in environment variables that match
+	viper.AutomaticEnv()
 
-  // If a config file is found, read it in.
-  if err := viper.ReadInConfig(); err == nil {
-    fmt.Println("Using config file:", viper.ConfigFileUsed())
-  }
+	if err := viper.ReadInConfig(); err == nil {
+		fmt.Println("Using config file:", viper.ConfigFileUsed())
+	}
 }
