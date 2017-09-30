@@ -619,10 +619,10 @@ get_deployment_json() {
 get_matching_route_rules() {
   local ROUTE_NAME="${1}"
   info "Getting matching route rules for ${ROUTE_NAME}"
-  for RULE in $(istioctl get routerules | awk "/^${ROUTE_NAME}-/{print \$1}" | sort); do
+  for RULE in $(${ISTIOCTL} get routerules | awk "/^${ROUTE_NAME}-/{print \$1}" | sort); do
     echo '---'
     info "Found rule: ${RULE}"
-    istioctl get routerules "${RULE}" -o yaml
+    ${ISTIOCTL} get routerules "${RULE}" -o yaml
   done
 }
 
