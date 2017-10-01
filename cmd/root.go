@@ -16,9 +16,7 @@ package cmd
 import (
 	"fmt"
 	"os"
-	"os/exec"
-
-	"strings"
+	"sort"
 
 	"github.com/mitchellh/go-homedir"
 	logging "github.com/op/go-logging"
@@ -150,36 +148,6 @@ func theseus(cmd *cobra.Command, args []string) {
 	os.Exit(1)
 }
 
-func callIstioctl(command ...string) string {
-	return callBinary(istioctlPath, command)
-}
-
-func callKubectl(command ...string) string {
-	return callBinary(kubectlPath, command)
-}
-
-func checkIsBinaryInPath(pathToBinary string) {
-	_, lookErr := exec.LookPath(pathToBinary)
-	if lookErr != nil {
-		panic(lookErr)
-	}
-}
-
-func callBinary(binary string, command []string) string {
-	if len(command) == 0 {
-		command = []string{"version"}
-	}
-	checkIsBinaryInPath(binary)
-
-	commandString := binary + " " + strings.Join(command[:], " ")
-	shellCommand := exec.Command("bash", "-c", commandString)
-	shellOutput, err := shellCommand.Output()
-	if err != nil {
-		panic(err)
-	}
-	return string(shellOutput)
-}
-
 func getRouteRule(routeruleYaml string) RouteRule {
 	routerule := RouteRule{}
 	err := yaml.Unmarshal([]byte(routeruleYaml), &routerule)
@@ -190,9 +158,24 @@ func getRouteRule(routeruleYaml string) RouteRule {
 	return routerule
 }
 
-func getHighestPrecedence() int {
+func getHighestPrecedence(rules []RouteRule) int {
+	sortRouteRules(rules)
+	return rules[0].Spec.Precedence
+}
 
-	return 100
+// simplified from https://github.com/istio/pilot/blob/master/model/config.go#L378-L389
+// TODO(ajm): sort by high precedence first, key string second (keys are unique)
+// TODO(ajm): protect against incompatible types
+func sortRouteRules(rules []RouteRule) {
+	log.Info("sorting route")
+	sort.Slice(rules, func(i, j int) bool {
+		irule := rules[i].Spec
+		jrule := rules[j].Spec
+		if irule.Destination != jrule.Destination {
+			panic("Routerule destinations do not match")
+		}
+		return irule.Precedence > jrule.Precedence
+	})
 }
 
 // ---
