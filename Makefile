@@ -75,7 +75,7 @@ alpine:
 	'
 
 test :
-	cd cmd && go test
+	go test $$(go list ./... | grep -v '/vendor/')
 
 release:
 	hub release create \

@@ -15,9 +15,9 @@ set -x
 declare -r DIR=$(cd "$(dirname "$0")" && pwd)
 declare -r THIS_SCRIPT="${DIR}/$(basename "$0")"
 
-CLUSTER_NAME=test-theseus
-DEFAULT_PROJECT=binarysludge-20170716-2
-DEFAULT_ZONE=europe-west2-a
+CLUSTER_NAME="test-theseus"
+DEFAULT_PROJECT="binarysludge-20170716-2"
+DEFAULT_ZONE="europe-west2-a"
 PREEMPTIBLE="--preemptible"
 CLUSTER_VERSION="1.7.5"
 
