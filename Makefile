@@ -10,6 +10,9 @@ all:
 	make test
 	make build
 
+test :
+	go test -v $$(go list ./... | grep -v '/vendor/')
+
 test-old:
 	cd test && ./test-acceptance.sh && ./test-theseus.sh
 
@@ -20,8 +23,7 @@ test-unit-old:
 	cd test && ./test-theseus.sh
 
 dev:
-	make test
-	make build
+	make test && make build
 
 dep-safe:
 	bash -xc ' \
@@ -42,11 +44,11 @@ prune:
 	dep prune -v
 
 build:
-	bash -xc ' \
+	bash -c ' \
 		PACKAGE="$(PACKAGE)"; \
 		STATUS=$$(git diff-index --quiet HEAD || echo "-dirty"); \
 		HASH="$$(git rev-parse --short HEAD)"; \
-		VERSION="$$(git describe --tags || echo $${HASH})$${STATUS}"; \
+		VERSION="$$(git describe --tags 2>/dev/null|| echo $${HASH})$${STATUS}"; \
 		go build -ldflags "\
 			-X $${PACKAGE}.buildStamp=$$(date -u '+%Y-%m-%d_%I:%M:%S%p') \
 			-X $${PACKAGE}.gitHash=$${HASH} \
@@ -74,14 +76,11 @@ alpine:
 		make build; \
 	'
 
-test :
-	go test $$(go list ./... | grep -v '/vendor/')
-
 release:
 	hub release create \
 		-d \
 		-a $$(basename $$(pwd)) \
-		-m "Version $$(git describe --tags)" \
+		-m "Version $$(git describe --tags 2>/dev/null)" \
 		-m "$$(git log --format=oneline \
 			| cut -d' ' -f 2- \
 			| awk '!x[$$0]++' \

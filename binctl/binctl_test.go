@@ -18,11 +18,13 @@ import (
 
 	"regexp"
 
+	"fmt"
+
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/suite"
 )
 
-type BinctlTestSuit struct {
+type BinctlTestSuite struct {
 	suite.Suite
 	IstioctlPath string
 	KubectlPath  string
@@ -30,22 +32,22 @@ type BinctlTestSuit struct {
 
 // run suite tests
 func TestBinctlParseTestSuite(t *testing.T) {
-	suite.Run(t, new(BinctlTestSuit))
+	suite.Run(t, new(BinctlTestSuite))
 }
 
-func (suite *BinctlTestSuit) SetupTest() {
+func (suite *BinctlTestSuite) SetupTest() {
 	suite.IstioctlPath = istioctlPath
 }
 
 func TestCallIstio(t *testing.T) {
-	output := callIstioctl()
+	output := CallIstioctl()
 	assert.NotEqual(t, "", output)
 }
 
-func (suite *BinctlTestSuit) TestCallIstioWithAbsentIstioPanics() {
+func (suite *BinctlTestSuite) TestCallIstioWithAbsentIstioPanics() {
 	istioctlPath = "/tmp/notIstioByAnyMeans"
 
-	assert.Panics(suite.T(), func() { callIstioctl() })
+	assert.Panics(suite.T(), func() { CallIstioctl() })
 	istioctlPath = suite.IstioctlPath
 }
 
@@ -57,14 +59,14 @@ User: root@822a7ac3ca86
 GolangVersion: go1.8.3` + "\n\n"
 	expectedRegex := regexp.MustCompile("^Version: 0.2.4")
 
-	output := callIstioctl("version")
+	output := CallIstioctl("version")
 
 	assert.Equal(t, expected, output)
 	assert.Regexp(t, expectedRegex, output)
 }
 
 func TestCallIstioGetRouterulesReturnsNonEmpty(t *testing.T) {
-	output := callIstioctl("get routerules -o yaml")
+	output := CallIstioctl("get routerules -o yaml")
 	assert.NotEqual(t, "", output)
 }
 
@@ -73,8 +75,67 @@ func TestCallKubectlVersion(t *testing.T) {
 Server Version: version.Info{Major:"1", Minor:"7+", GitVersion:"v1.7.5-gke.1", GitCommit:"2aa350cad8d86efa8c94811b70bd67646daf5772", GitTreeState:"clean", BuildDate:"2017-09-27T17:38:14Z", GoVersion:"go1.8.3", Compiler:"gc", Platform:"linux/amd64"}` + "\n"
 	expectedRegex := regexp.MustCompile("^Client Version:.*\nServer Version:")
 
-	output := callKubectl("version")
+	output := CallKubectl("version")
 
 	assert.Equal(t, expected, output)
 	assert.Regexp(t, expectedRegex, output)
+}
+
+// ---
+
+var kubectlVersionDataProvider = []struct {
+	requiredVersion string
+	clientVersion   string
+	serverVersion   string
+	expected        bool
+}{
+	{"1.1.0", "1.0.0", "1.0.0", false},
+	{"1.6.0", "1.6.0", "1.7.0", true},
+	{"1.7.0", "1.6.0", "1.7.0", false},
+	{"1.7.0", "1.7.4", "1.8.1", true},
+	{"2.1.1", "1.6.0", "1.7.0", false},
+}
+
+func (suite *BinctlTestSuite) TestCheckKubectlVersion() {
+	for _, data := range kubectlVersionDataProvider {
+
+		versions := struct {
+			Client string
+			Server string
+		}{data.clientVersion, data.serverVersion}
+
+		assert.Equal(suite.T(),
+			CheckKubectlVersion(data.requiredVersion, versions),
+			data.expected,
+			fmt.Sprintf("failed for test data %+v", data),
+		)
+	}
+}
+
+// ---
+
+var istioVersionDataProvider = []struct {
+	requiredVersion string
+	clientVersion   string
+	expected        bool
+}{
+	{"0.2.4", "0.2.1", false},
+	{"0.2.4", "0.2.4", true},
+	{"0.3.0", "0.2.4", false},
+	{"1.0.0", "0.2.4", false},
+}
+
+func (suite *BinctlTestSuite) TestCheckIstioctlVersion() {
+	for _, data := range istioVersionDataProvider {
+
+		versions := struct {
+			Client string
+		}{data.clientVersion}
+
+		assert.Equal(suite.T(),
+			CheckIstioctlVersion(data.requiredVersion, versions),
+			data.expected,
+			fmt.Sprintf("failed for test data %+v", data),
+		)
+	}
 }

@@ -19,10 +19,12 @@ import (
 	"sort"
 
 	"github.com/mitchellh/go-homedir"
-	logging "github.com/op/go-logging"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 	"gopkg.in/yaml.v2"
+
+	"github.com/controlplaneio/theseus/binctl"
+	logging "github.com/op/go-logging"
 )
 
 var cfgFile string
@@ -32,8 +34,8 @@ var gitHash = "unknown"
 var buildVersion = "unknown"
 
 var (
-	istioctlPath = "istioctl"
-	kubectlPath  = "kubectl"
+	minIstioctlVersion = "0.2.4"
+	minKubectlVersion  = "1.7.0"
 
 	isVersionFlag    bool = false
 	timeoutSeconds   int
@@ -122,7 +124,17 @@ func theseus(cmd *cobra.Command, args []string) {
 	}
 
 	log.Info("check_kubernetes_version")
+	if !binctl.CheckKubectlVersion(minKubectlVersion) {
+		log.Error("kubectl version %s or greater required", minKubectlVersion)
+		os.Exit(1)
+	}
+
 	log.Info("check_istio_version")
+	if !binctl.CheckIstioctlVersion(minIstioctlVersion) {
+		log.Error("istioctl version %s or greater required", minIstioctlVersion)
+		os.Exit(1)
+	}
+
 	log.Info("check_for_autoscaler")
 	log.Info("if IS_DELETE - delete_route_and_deployment")
 	log.Info("get highest precedence")
