@@ -96,19 +96,12 @@ func theseus(cmd *cobra.Command, args []string) {
 		os.Exit(0)
 	}
 
-	log.Info("check_kubernetes_version")
-	if !binctl.CheckKubectlVersion(minKubectlVersion) {
-		log.Error("kubectl version %s or greater required", minKubectlVersion)
-		os.Exit(1)
-	}
+	checkKubectlVersion()
 
-	log.Info("check_istio_version")
-	if !binctl.CheckIstioctlVersion(minIstioctlVersion) {
-		log.Error("istioctl version %s or greater required", minIstioctlVersion)
-		os.Exit(1)
-	}
+	checkIstioctlVersion()
 
-	log.Info("check_for_autoscaler")
+	checkHorizontalPodAutoscaler()
+
 	log.Info("if IS_DELETE - delete_route_and_deployment")
 	log.Info("get highest precedence")
 
@@ -131,6 +124,30 @@ func theseus(cmd *cobra.Command, args []string) {
 	log.Info("Deployment of ${FILENAME} succeeded in ${SECONDS}")
 
 	os.Exit(1)
+}
+
+func checkHorizontalPodAutoscaler() {
+	log.Info("check_for_autoscaler")
+	if binctl.IsAutoScalerEnabled() {
+		log.Error("autoscaler is enabled. Cannot continue")
+		os.Exit(1)
+	}
+}
+
+func checkIstioctlVersion() {
+	log.Info("check_istio_version")
+	if !binctl.CheckIstioctlVersion(minIstioctlVersion) {
+		log.Error("istioctl version %s or greater required", minIstioctlVersion)
+		os.Exit(1)
+	}
+}
+
+func checkKubectlVersion() {
+	log.Info("check_kubernetes_version")
+	if !binctl.CheckKubectlVersion(minKubectlVersion) {
+		log.Error("kubectl version %s or greater required", minKubectlVersion)
+		os.Exit(1)
+	}
 }
 
 func getRouteRule(routeruleYaml string) types.RouteRule {

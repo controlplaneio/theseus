@@ -50,14 +50,20 @@ func callBinary(binary string, command []string) string {
 	}
 	checkIsBinaryInPath(binary)
 
-	commandString := binary + " " + strings.Join(command[:], " ")
+	commandString := binary + " " + strings.Join(command[:], " ") + " 2>&1"
 	log.Info("command string", commandString)
 	shellCommand := exec.Command("bash", "-c", commandString)
 	shellOutput, err := shellCommand.Output()
 	if err != nil {
 		panic(err)
 	}
-	return string(shellOutput)
+	return strings.TrimSpace(string(shellOutput))
+}
+
+func IsAutoScalerEnabled() bool {
+	hpaOutput := CallKubectl("get horizontalpodautoscaler")
+	log.Info("HPA output:", hpaOutput)
+	return hpaOutput != "No resources found."
 }
 
 func CheckKubectlVersion(requiredVersion string, version ...struct {
