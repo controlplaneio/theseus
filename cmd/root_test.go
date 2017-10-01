@@ -20,7 +20,7 @@ import (
 	"github.com/stretchr/testify/suite"
 )
 
-type YamlParseTestSuite struct {
+type RootTestSuite struct {
 	suite.Suite
 	RouteruleYaml                 string
 	RouteruleHigherPrecedenceYaml string
@@ -29,10 +29,10 @@ type YamlParseTestSuite struct {
 
 // run suite tests
 func TestYamlParseTestSuite(t *testing.T) {
-	suite.Run(t, new(YamlParseTestSuite))
+	suite.Run(t, new(RootTestSuite))
 }
 
-func (suite *YamlParseTestSuite) SetupTest() {
+func (suite *RootTestSuite) SetupTest() {
 	suite.RouteruleYaml = `apiVersion: config.istio.io/v1alpha2
 kind: RouteRule
 metadata:
@@ -72,14 +72,14 @@ spec:
 `
 }
 
-func (suite *YamlParseTestSuite) TestParseRouteRule() {
+func (suite *RootTestSuite) TestParseRouteRule() {
 	routerule := getRouteRule(suite.RouteruleYaml)
 
 	assert.IsType(suite.T(), RouteRule{}, routerule)
 	assert.Equal(suite.T(), routerule.Spec.Destination.Name, "details")
 }
 
-func (suite *YamlParseTestSuite) TestGetHighestPrecedenceRouteRule() {
+func (suite *RootTestSuite) TestGetHighestPrecedenceRouteRule() {
 	highestPrecedenceRouteRule := getRouteRule(suite.RouteruleHigherPrecedenceYaml)
 	SortedRules := []RouteRule{
 		getRouteRule(suite.RouteruleYaml),
@@ -94,7 +94,7 @@ func (suite *YamlParseTestSuite) TestGetHighestPrecedenceRouteRule() {
 	)
 }
 
-func (suite *YamlParseTestSuite) TestGetHighestPrecedence() {
+func (suite *RootTestSuite) TestGetHighestPrecedence() {
 	SortedRules := []RouteRule{
 		getRouteRule(suite.RouteruleYaml),
 		getRouteRule(suite.RouteruleHigherPrecedenceYaml),
@@ -105,7 +105,7 @@ func (suite *YamlParseTestSuite) TestGetHighestPrecedence() {
 	assert.Equal(suite.T(), highestPrecedence, 2123)
 }
 
-func (suite *YamlParseTestSuite) TestGetHighestPrecedencePanicsWithDifferentTypes() {
+func (suite *RootTestSuite) TestGetHighestPrecedencePanicsWithDifferentTypes() {
 	SortedRules := []RouteRule{
 		getRouteRule(suite.RouteruleYaml),
 		getRouteRule(suite.RouteruleHigherPrecedenceYaml),

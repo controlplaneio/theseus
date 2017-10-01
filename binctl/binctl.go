@@ -14,11 +14,11 @@
 package binctl
 
 import (
-	"os"
 	"os/exec"
-
+	"regexp"
 	"strings"
 
+	"github.com/blang/semver"
 	logging "github.com/op/go-logging"
 )
 
@@ -29,27 +29,11 @@ var (
 	log = logging.MustGetLogger("example")
 )
 
-func setupLogging() {
-
-	format := logging.MustStringFormatter(
-		`%{color}%{time:15:04:05.000} %{shortfunc} ▶ %{level:.4s} %{id:03x}%{color:reset} %{message}`,
-	)
-
-	logBackend := logging.NewLogBackend(os.Stderr, "", 0)
-	backendFormatter := logging.NewBackendFormatter(logBackend, format)
-	backendLeveled := logging.AddModuleLevel(backendFormatter)
-
-	//backendLeveled.SetLevel(logging.ERROR, "")
-	backendLeveled.SetLevel(logging.INFO, "")
-
-	logging.SetBackend(backendLeveled)
-}
-
-func callIstioctl(command ...string) string {
+func CallIstioctl(command ...string) string {
 	return callBinary(istioctlPath, command)
 }
 
-func callKubectl(command ...string) string {
+func CallKubectl(command ...string) string {
 	return callBinary(kubectlPath, command)
 }
 
@@ -74,4 +58,77 @@ func callBinary(binary string, command []string) string {
 		panic(err)
 	}
 	return string(shellOutput)
+}
+
+func CheckKubectlVersion(requiredVersion string, version ...struct {
+	Client string
+	Server string
+}) bool {
+
+	var clientVersion semver.Version
+	var serverVersion semver.Version
+
+	if len(version) > 1 {
+		panic("Only one version injection permitted")
+
+	} else if len(version) == 1 {
+		clientVersion = getSemver(version[0].Client)
+		serverVersion = getSemver(version[0].Server)
+
+	} else {
+		versionOutput := CallKubectl("version")
+		versionOutputLines := strings.Split(versionOutput, "\n")
+
+		re := regexp.MustCompile(`.*GitVersion:"v([^"]*)".*`)
+
+		gitVersionClient := re.ReplaceAllString(versionOutputLines[0], `$1`)
+		gitVersionServer := re.ReplaceAllString(versionOutputLines[1], `$1`)
+		clientVersion = getSemver(gitVersionClient)
+		serverVersion = getSemver(gitVersionServer)
+	}
+
+	requiredVersionSemver := getSemver(requiredVersion)
+
+	log.Info("client version kubectl", clientVersion)
+	log.Info("server version kubectl", serverVersion)
+
+	return clientVersion.GTE(requiredVersionSemver) && serverVersion.GTE(requiredVersionSemver)
+}
+
+func CheckIstioctlVersion(requiredVersion string, version ...struct {
+	Client string
+}) bool {
+
+	var clientVersion semver.Version
+
+	if len(version) > 1 {
+		panic("Only one version injection permitted")
+
+	} else if len(version) == 1 {
+		clientVersion = getSemver(version[0].Client)
+
+	} else {
+		versionOutput := CallIstioctl("version")
+		versionOutputLines := strings.Split(versionOutput, "\n")
+
+		re := regexp.MustCompile(`^Version: (.*)`)
+
+		gitVersionClient := re.ReplaceAllString(versionOutputLines[0], `$1`)
+		clientVersion = getSemver(gitVersionClient)
+	}
+
+	requiredVersionSemver := getSemver(requiredVersion)
+
+	log.Info("client version istioctl", clientVersion)
+
+	return clientVersion.GTE(requiredVersionSemver)
+}
+
+func getSemver(providedVersion string) semver.Version {
+	parsedVersion, err := semver.Make(providedVersion)
+	if err != nil {
+		log.Error("Validation failed for '%s': %s\n", providedVersion, err)
+		panic(err)
+	}
+	return parsedVersion
 }

@@ -2,6 +2,12 @@
 
 
 [[projects]]
+  name = "github.com/blang/semver"
+  packages = ["."]
+  revision = "2ee87856327ba09384cabd113bc6b5d174e9ec0f"
+  version = "v3.5.1"
+
+[[projects]]
   name = "github.com/davecgh/go-spew"
   packages = ["spew"]
   revision = "346938d642f2ec3594ed81d874461961cd0faa76"
@@ -15,12 +21,6 @@
 
 [[projects]]
   branch = "master"
-  name = "github.com/golang/protobuf"
-  packages = ["proto","ptypes/any","ptypes/duration"]
-  revision = "130e6b02ab059e7b717a096f397c5b60111cae74"
-
-[[projects]]
-  branch = "master"
   name = "github.com/hashicorp/hcl"
   packages = [".","hcl/ast","hcl/parser","hcl/scanner","hcl/strconv","hcl/token","json/parser","json/scanner","json/token"]
   revision = "68e816d1c783414e79bc65b3994d9ab6b0a722ab"
@@ -30,12 +30,6 @@
   packages = ["."]
   revision = "76626ae9c91c4f2a10f34cad8ce83ea42c93bb75"
   version = "v1.0"
-
-[[projects]]
-  branch = "costin-build"
-  name = "github.com/istio/api"
-  packages = ["proxy/v1/config"]
-  revision = "05a2f102d731bf6930efb774b66ef3b17f09d8a6"
 
 [[projects]]
   name = "github.com/magiconair/properties"
@@ -142,6 +136,6 @@
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
-  inputs-digest = "f94907d570e5376f0b4d2d79055e555a7b60817e3445dacdcdc288474f8efabd"
+  inputs-digest = "18c726efe8574e415b689fb019a2897b009193575bd364a5cecd3af88688bd78"
   solver-name = "gps-cdcl"
   solver-version = 1
