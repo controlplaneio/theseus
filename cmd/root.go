@@ -24,6 +24,7 @@ import (
 	"gopkg.in/yaml.v2"
 
 	"github.com/controlplaneio/theseus/binctl"
+	"github.com/controlplaneio/theseus/types"
 	logging "github.com/op/go-logging"
 )
 
@@ -69,34 +70,6 @@ This project is currently in alpha, feedback and PRs welcome.`,
 
 	log = logging.MustGetLogger("example")
 )
-
-type RouteRule struct {
-	APIVersion string `yaml:"apiVersion"`
-	Kind       string `yaml:"kind"`
-	Metadata   struct {
-		Name string `yaml:"name"`
-	} `yaml:"metadata"`
-	Spec struct {
-		Destination struct {
-			Name string `yaml:"name"`
-		} `yaml:"destination"`
-		Match struct {
-			Request struct {
-				Headers struct {
-					Cookie struct {
-						Regex string `yaml:"regex"`
-					} `yaml:"cookie"`
-				} `yaml:"headers"`
-			} `yaml:"request"`
-		} `yaml:"match"`
-		Precedence int `yaml:"precedence"`
-		Route      []struct {
-			Labels struct {
-				Version string `yaml:"version"`
-			} `yaml:"labels"`
-		} `yaml:"route"`
-	} `yaml:"spec"`
-}
 
 func setupLogging() {
 
@@ -160,8 +133,8 @@ func theseus(cmd *cobra.Command, args []string) {
 	os.Exit(1)
 }
 
-func getRouteRule(routeruleYaml string) RouteRule {
-	routerule := RouteRule{}
+func getRouteRule(routeruleYaml string) types.RouteRule {
+	routerule := types.RouteRule{}
 	err := yaml.Unmarshal([]byte(routeruleYaml), &routerule)
 	if err != nil {
 		panic(err)
@@ -170,7 +143,7 @@ func getRouteRule(routeruleYaml string) RouteRule {
 	return routerule
 }
 
-func getHighestPrecedence(rules []RouteRule) int {
+func getHighestPrecedence(rules []types.RouteRule) int {
 	sortRouteRules(rules)
 	return rules[0].Spec.Precedence
 }
@@ -178,7 +151,7 @@ func getHighestPrecedence(rules []RouteRule) int {
 // simplified from https://github.com/istio/pilot/blob/master/model/config.go#L378-L389
 // TODO(ajm): sort by high precedence first, key string second (keys are unique)
 // TODO(ajm): protect against incompatible types
-func sortRouteRules(rules []RouteRule) {
+func sortRouteRules(rules []types.RouteRule) {
 	log.Info("sorting route")
 	sort.Slice(rules, func(i, j int) bool {
 		irule := rules[i].Spec

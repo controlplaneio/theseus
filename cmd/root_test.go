@@ -18,6 +18,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/suite"
+
+	"github.com/controlplaneio/theseus/types"
 )
 
 type RootTestSuite struct {
@@ -75,13 +77,13 @@ spec:
 func (suite *RootTestSuite) TestParseRouteRule() {
 	routerule := getRouteRule(suite.RouteruleYaml)
 
-	assert.IsType(suite.T(), RouteRule{}, routerule)
+	assert.IsType(suite.T(), types.RouteRule{}, routerule)
 	assert.Equal(suite.T(), routerule.Spec.Destination.Name, "details")
 }
 
 func (suite *RootTestSuite) TestGetHighestPrecedenceRouteRule() {
 	highestPrecedenceRouteRule := getRouteRule(suite.RouteruleHigherPrecedenceYaml)
-	SortedRules := []RouteRule{
+	SortedRules := []types.RouteRule{
 		getRouteRule(suite.RouteruleYaml),
 		highestPrecedenceRouteRule,
 	}
@@ -95,7 +97,7 @@ func (suite *RootTestSuite) TestGetHighestPrecedenceRouteRule() {
 }
 
 func (suite *RootTestSuite) TestGetHighestPrecedence() {
-	SortedRules := []RouteRule{
+	SortedRules := []types.RouteRule{
 		getRouteRule(suite.RouteruleYaml),
 		getRouteRule(suite.RouteruleHigherPrecedenceYaml),
 	}
@@ -106,7 +108,7 @@ func (suite *RootTestSuite) TestGetHighestPrecedence() {
 }
 
 func (suite *RootTestSuite) TestGetHighestPrecedencePanicsWithDifferentTypes() {
-	SortedRules := []RouteRule{
+	SortedRules := []types.RouteRule{
 		getRouteRule(suite.RouteruleYaml),
 		getRouteRule(suite.RouteruleHigherPrecedenceYaml),
 		getRouteRule(suite.RouteruleOtherDestination),
