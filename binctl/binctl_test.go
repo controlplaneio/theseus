@@ -52,16 +52,10 @@ func (suite *BinctlTestSuite) TestCallIstioWithAbsentIstioPanics() {
 }
 
 func TestCallIstioVersion(t *testing.T) {
-	expected := `Version: 0.2.4
-GitRevision: 9c7c291eab0a522f8033decd0f5b031f5ed0e126
-GitBranch: master
-User: root@822a7ac3ca86
-GolangVersion: go1.8.3`
 	expectedRegex := regexp.MustCompile("^Version: 0.2.4")
 
 	output := CallIstioctl("version")
 
-	assert.Equal(t, expected, output)
 	assert.Regexp(t, expectedRegex, output)
 }
 
@@ -71,13 +65,10 @@ func TestCallIstioGetRouterulesReturnsNonEmpty(t *testing.T) {
 }
 
 func TestCallKubectlVersion(t *testing.T) {
-	expected := `Client Version: version.Info{Major:"1", Minor:"7", GitVersion:"v1.7.3", GitCommit:"2c2fe6e8278a5db2d15a013987b53968c743f2a1", GitTreeState:"clean", BuildDate:"2017-08-03T07:00:21Z", GoVersion:"go1.8.3", Compiler:"gc", Platform:"linux/amd64"}
-Server Version: version.Info{Major:"1", Minor:"7+", GitVersion:"v1.7.5-gke.1", GitCommit:"2aa350cad8d86efa8c94811b70bd67646daf5772", GitTreeState:"clean", BuildDate:"2017-09-27T17:38:14Z", GoVersion:"go1.8.3", Compiler:"gc", Platform:"linux/amd64"}`
 	expectedRegex := regexp.MustCompile("^Client Version:.*\nServer Version:")
 
 	output := CallKubectl("version")
 
-	assert.Equal(t, expected, output)
 	assert.Regexp(t, expectedRegex, output)
 }
 
