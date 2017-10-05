@@ -52,7 +52,7 @@ func (suite *BinctlTestSuite) TestCallIstioWithAbsentIstioPanics() {
 }
 
 func TestCallIstioVersion(t *testing.T) {
-	expectedRegex := regexp.MustCompile("^Version: 0.2.4")
+	expectedRegex := regexp.MustCompile("^Version: 0.2.*")
 
 	output := CallIstioctl("version")
 
