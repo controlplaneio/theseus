@@ -43,7 +43,7 @@ main() {
 
   [[ "${DEBUG:-0}" == 1 ]] && set -x
 
-  BIN="./theseus"
+  BIN="./theseus.sh"
   APP="timeout --foreground --kill-after=15s 300s ${BIN}"
   DRY_RUN_DEFAULTS="test/theseus/asset/beefjerky-deployment-v1.yaml --dry-run"
 

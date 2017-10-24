@@ -19,7 +19,7 @@ CLUSTER_NAME="test-theseus"
 DEFAULT_PROJECT="binarysludge-20170716-2"
 DEFAULT_ZONE="europe-west2-a"
 PREEMPTIBLE="--preemptible"
-CLUSTER_VERSION="1.7.5"
+CLUSTER_VERSION="1.7.8"
 
 check_for_gcloud() {
   if ! command gcloud &>/dev/null; then
@@ -75,7 +75,7 @@ deploy_cluster() {
     --cluster-version=${CLUSTER_VERSION} \
     --num-nodes 2 2>&1); then
 
-    if echo "${OUTPUT}" | grep 'Version is invalid.' &>/dev/null; then
+    if echo "${OUTPUT}" | grep -E 'Version [0-9\.\"]+ is invalid.' &>/dev/null; then
       local MASTER_VERSIONS=$(get_master_versions)
       error "Version ${CLUSTER_VERSION} is invalid. Master versions: ${MASTER_VERSIONS} - PLEASE UPGRADE"
     elif [[ -n "${CI:-}" ]] && echo "${OUTPUT}" | grep 'currently upgrading cluster' &>/dev/null; then
