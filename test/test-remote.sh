@@ -184,9 +184,9 @@ main() {
 cleanup() {
 
   if [[ -n "${CI_JOB_ID:-}" ]]; then
-    local DEBUG_LOG_NAME="../debug-${CI_JOB_ID}.log"
+    local DEBUG_LOG_NAME="${DIR}/../debug-${CI_JOB_ID}.log"
     printf "" | tee "${DEBUG_LOG_NAME}"
-    cat ../debug.log | sed '/^    /d' >>"${DEBUG_LOG_NAME}"
+    cat "${DIR}"/../debug.log | sed '/^    /d' >>"${DEBUG_LOG_NAME}"
   fi
 
   # set +x

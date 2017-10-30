@@ -48,9 +48,7 @@ main() {
     fi
   fi
 
-  if ! no_cleanup; then
-    cleanup_istio
-  fi
+  cleanup_istio
 
   # TODO(ajm): programmatically infer user
   echo 'Creating temporary clusterrolebinding - remove when supported by istio'
@@ -81,9 +79,9 @@ main() {
       --namespace istio-system \
       -l istio=ingress \
       -o 'jsonpath={.items[0].status.hostIP}'):$(kubectl get svc \
-      --namespace istio-system \
-      istio-ingress \
-      -o 'jsonpath={.spec.ports[0].nodePort}')
+        --namespace istio-system \
+        istio-ingress \
+        -o 'jsonpath={.spec.ports[0].nodePort}')
   else
     GATEWAY_URL=$(kubectl get ingress gateway \
       -o 'jsonpath={.status.loadBalancer.ingress[].ip}')
@@ -205,7 +203,7 @@ check_is_gcloud_quota_ok() {
 }
 
 gcloud-quota-check() {
-  for REGION in $(gcloud compute regions list --format="value(name)"); do
+  for REGION in $(gcloud compute regions list --format="value(name)" | grep "europe-west2"); do
     echo ${REGION}
     gcloud compute regions describe "${REGION}" --format json \
       | jq '.quotas[] | select(.limit > 0) | select(.usage >= (.limit * 0.8)) | .'
@@ -217,10 +215,6 @@ check_is_test_cluster() {
     echo "ERROR! Not a test cluster!"
     exit 1
   fi
-}
-
-no_cleanup() {
-  [[ "${PERSIST_CLUSTER:-0}" == 1 ]]
 }
 
 cleanup_istio() {
