@@ -8,10 +8,8 @@
 ## Usage: %SCRIPT_NAME% [options] filename
 ##
 ## Options:
-##   -d, --description [string]  Description
-##   -t, --type [bash]           Template type to create
-##   --debug                     More debug
 ##
+##   --debug                     More debug
 ##   -h --help                   Display this message
 ##
 
@@ -24,7 +22,9 @@ set -o noclobber
 
 # user defaults
 DESCRIPTION="theseus acceptance tests"
-DEBUG=0
+DEBUG="${DEBUG:-0}"
+
+echo "DEBUG $DEBUG"
 
 # resolved directory and self
 declare -r DIR=$(cd "$(dirname "$0")" && pwd)
@@ -44,13 +44,18 @@ main() {
   [[ "${DEBUG:-0}" == 1 ]] && set -x
 
   BIN="./theseus.sh"
-  APP="timeout --foreground --kill-after=15s 300s ${BIN}"
-  DRY_RUN_DEFAULTS="test/theseus/asset/beefjerky-deployment-v1.yaml --dry-run"
-
   if [[ ! -f "${BIN}" ]]; then
     echo "not found from $(pwd)"
     exit 1
   fi
+
+  if [[ "${DEBUG_FLAG:-}" != "" ]]; then
+    BIN+=" --debug-file"
+  fi
+
+  APP="timeout --foreground --kill-after=15s 300s ${BIN}"
+  DRY_RUN_DEFAULTS="test/theseus/asset/beefjerky-deployment-v1.yaml --dry-run"
+
 
   # assert
   # refute
@@ -107,7 +112,18 @@ main() {
     ${APP} test/theseus/asset/reviews-deployment-v1.yaml \
       --timeout 1 \
       --cookie cookie \
-      ${DEBUG}
+      ${DEBUG_FLAG}
+
+    assert_success
+  }
+
+  test "cleans route rules"
+  {
+
+    ${APP} test/theseus/asset/reviews-deployment-v1.yaml \
+      --delete \
+      --cookie cookie \
+      ${DEBUG_FLAG}
 
     assert_success
   }
@@ -118,7 +134,7 @@ main() {
     ${APP} test/theseus/asset/reviews-deployment-v1.yaml \
       --delete \
       --cookie cookie \
-      ${DEBUG}
+      ${DEBUG_FLAG}
 
     assert_success
   }
@@ -128,7 +144,7 @@ main() {
 
     ${APP} test/theseus/asset/reviews-deployment-v2.yaml \
       --delete \
-      ${DEBUG}
+      ${DEBUG_FLAG}
 
     assert_success
   }
@@ -170,7 +186,7 @@ main() {
   {
 
     ${APP} test/theseus/asset/reviews-deployment-v2.yaml \
-      ${DEBUG} \
+      ${DEBUG_FLAG} \
       --cookie choc-chip \
       --test "test \$(curl -A 'Mozilla/4.0' --compressed --connect-timeout 5 \
      --header 'cookie: choc-chip' \
@@ -184,7 +200,7 @@ main() {
   {
 
     ${APP} test/theseus/asset/reviews-deployment-v3.yaml \
-      ${DEBUG} \
+      ${DEBUG_FLAG} \
       --cookie rasperry \
       --test "test \$(curl -A 'Mozilla/4.0' --compressed --connect-timeout 5 \
      --header 'cookie: raspberry' \
@@ -201,7 +217,7 @@ main() {
 
     # intentionally failing deployment (service starts, healthchecks, fails after 5s)
     if ${APP} test/theseus/asset/bad-ghost-deployment.yaml \
-      ${DEBUG} \
+      ${DEBUG_FLAG} \
       --user-agent '.*' \
       --test "test \$(curl -A 'Mozilla/4.0' --compressed --connect-timeout 5 \
      --max-time 5  \"http://\${GATEWAY_URL}/productpage\" \
@@ -231,9 +247,9 @@ handle_arguments() {
   [[ -n "${LOCAL_ISTIO:-}" ]] && ../local-istio.sh >&2
   cd "${DIR}/.." >&2
   if [[ "${DEBUG:-0}" == 1 ]]; then
-    DEBUG='--debug'
+    DEBUG_FLAG='--debug'
   else
-    DEBUG=''
+    DEBUG_FLAG=''
   fi
 
 }

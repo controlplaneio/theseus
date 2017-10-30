@@ -31,6 +31,7 @@
 ##   --delete                    Remove existing deployment and route
 ##
 ##   --debug                     More debug
+##   --debug-file                Debug to /tmp/debug
 ##   --dry-run                   Dry-run; only show what would be done
 ##   -h --help                   Display this message
 ##
@@ -42,8 +43,9 @@ set -o pipefail
 set -o noclobber
 
 # user defaults
-DEBUG=0
 DRY_RUN=0
+DEBUG=${DEBUG:-0}
+[[ "${DEBUG}" == 1 ]] && set -x
 
 # resolved directory and self
 declare -r DIR=$(cd "$(dirname "$0")" && pwd)
@@ -60,12 +62,14 @@ FILENAME=''
 RULE_FILE=''
 TIMEOUT_PID=''
 
+MIN_ISTIO_VERSION="0.2.10"
+
 check_kubernetes_version() {
   if ! local KUBERNETES_VERSION=$(kubectl version --short \
     | awk '/Server Version:/{ print $3 }'); then
     error "Failed to get k8s version"
   fi
-  if ! check_version v1.5.7 ${KUBERNETES_VERSION}; then
+  if ! check_version v1.7.0 ${KUBERNETES_VERSION}; then
     error "kubectl version must be v1.5.7 or greater"
   fi
 }
@@ -75,8 +79,8 @@ check_istio_version() {
     | awk '/^Version:/{ print $2 }'); then
     error "Failed to get istio version"
   fi
-  if ! check_version 0.1.6 ${ISTIO_VERSION}; then
-    error "istioctl version must be v0.1.6 or greater"
+  if ! check_version ${MIN_ISTIO_VERSION} ${ISTIO_VERSION}; then
+    error "istioctl version must be v${MIN_ISTIO_VERSION} or greater. '${ISTIO_VERSION}' found"
   fi
 }
 
@@ -191,7 +195,7 @@ rollback() {
   trap - EXIT
   warning "Performing rollback"
   warning "Jobs: $(jobs)"
-  warning "Debubg: $(ps fauxwww)"
+#  warning "Debubg: $(ps fauxwww)"
   if [[ -n "${TIMEOUT_PID:-}" ]] && pgrep "${TIMEOUT_PID}"; then
     kill "${TIMEOUT_PID}"
   fi
@@ -814,6 +818,11 @@ parse_arguments() {
         DEBUG=1
         set -xe
         ;;
+      --debug-file)
+        DEBUG=1
+        set -xe
+        exec 2> >(tee --ignore-interrupts /tmp/debug >/dev/null)
+        ;;
       --)
         shift
         break
@@ -835,22 +844,22 @@ usage() {
 
 success() {
   [ "${@:-}" ] && RESPONSE="$@" || RESPONSE="Unknown Success"
-  printf "$(log_message_prefix)${COLOUR_GREEN}%s${COLOUR_RESET}\n" "${RESPONSE}" | tee -a debug.log
+  printf "$(log_message_prefix)${COLOUR_GREEN}%s${COLOUR_RESET}\n" "${RESPONSE}" | tee -a "${DIR}"/debug.log
 } 1>&2
 
 info() {
   [ "${@:-}" ] && INFO="$@" || INFO="Unknown Info"
-  printf "$(log_message_prefix)${COLOUR_WHITE}%s${COLOUR_RESET}\n" "${INFO}" | tee -a debug.log
+  printf "$(log_message_prefix)${COLOUR_WHITE}%s${COLOUR_RESET}\n" "${INFO}" | tee -a "${DIR}"/debug.log
 } 1>&2
 
 warning() {
   [ "${@:-}" ] && ERROR="$@" || ERROR="Unknown Warning"
-  printf "$(log_message_prefix)${COLOUR_RED}%s${COLOUR_RESET}\n" "${ERROR}" | tee -a debug.log
+  printf "$(log_message_prefix)${COLOUR_RED}%s${COLOUR_RESET}\n" "${ERROR}" | tee -a "${DIR}"/debug.log
 } 1>&2
 
 error() {
   [ "${@:-}" ] && ERROR="$@" || ERROR="Unknown Error"
-  printf "$(log_message_prefix)${COLOUR_RED}%s${COLOUR_RESET}\n" "${ERROR}" | tee -a debug.log
+  printf "$(log_message_prefix)${COLOUR_RED}%s${COLOUR_RESET}\n" "${ERROR}" | tee -a "${DIR}"/debug.log
   exit 3
 } 1>&2
 
@@ -938,7 +947,7 @@ if ! is_sourced; then
   export COLOUR_WHITE=$(tput setaf 7 :-"" 2>/dev/null)
   export COLOUR_RESET=$(tput sgr0 :-"" 2>/dev/null)
 
-  echo | tee -a debug.log
+  echo | tee -a "${DIR}"/debug.log
   success "Starting theseus" &>/dev/null
 
   main "$@"
