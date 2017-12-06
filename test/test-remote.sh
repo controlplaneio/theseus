@@ -19,7 +19,7 @@ CLUSTER_NAME="test-theseus"
 DEFAULT_PROJECT="binarysludge-20170716-2"
 DEFAULT_ZONE="europe-west2-a"
 PREEMPTIBLE="--preemptible"
-CLUSTER_VERSION="1.7.8"
+CLUSTER_VERSION="1.8.3-gke.0"
 
 check_for_gcloud() {
   if ! command gcloud &>/dev/null; then
@@ -71,6 +71,7 @@ deploy_cluster() {
   if ! OUTPUT=$( (yes || true) | gcloud container clusters create "${CLUSTER_NAME}" \
     --machine-type n1-highcpu-8 \
     --enable-autorepair \
+    --no-enable-legacy-authorization \
     ${PREEMPTIBLE} \
     --cluster-version=${CLUSTER_VERSION} \
     --num-nodes 2 2>&1); then
@@ -109,6 +110,10 @@ deploy_cluster() {
   fi
 
   gcloud container clusters get-credentials "${CLUSTER_NAME}"
+
+  kubectl delete clusterrolebinding cluster-admin-binding || true
+  sleep 2
+  kubectl create clusterrolebinding cluster-admin-binding --clusterrole=cluster-admin --user="$(gcloud config get-value core/account)"
 }
 
 delete_cluster() {
@@ -178,7 +183,7 @@ main() {
 
   _debug_time
 
-  success "Tests passed"1
+  success "Tests passed"
 }
 
 cleanup() {

@@ -246,13 +246,13 @@ delete_route_and_deployment() {
   check_for_autoscaler
 
   if [[ "${DRY_RUN:-}" == 0 ]] && is_rule_deployed "${RULE_NAME}"; then
-    ${ISTIOCTL} delete routerule "${RULE_NAME}"
+    ${ISTIOCTL} --namespace "${NAMESPACE}" delete routerule "${RULE_NAME}"
   fi
 
   if [[ -z "${DEPLOYMENT_NAME:-}" ]]; then
     error "No deployment found in '${FILENAME}'"
   elif [[ "${DRY_RUN:-}" == 0 ]] && kubectl get deployments "${DEPLOYMENT_NAME}" 2>/dev/null; then
-    kubectl delete -f "${FILENAME}"
+    kubectl delete --namespace "${NAMESPACE}" -f "${FILENAME}"
     success "${FILENAME} deleted"
   else
     warning "Deployment '${DEPLOYMENT_NAME}' from '${FILENAME}' not found in cluster"
@@ -341,14 +341,14 @@ deploy_rule() {
   local OUTPUT
   if is_rule_deployed "${RULE_NAME}"; then
     info "Replacing rule ${RULE_NAME}"
-    FULL_COMMAND="${COMMAND} istioctl replace --namespace "${NAMESPACE}" -f "${RULE_FILE}""
+    FULL_COMMAND="${COMMAND} ${ISTIOCTL} replace --namespace "${NAMESPACE}" -f "${RULE_FILE}""
     if ! OUTPUT=$(${FULL_COMMAND}); then
       warning "Deploy replace rule failed: ${OUTPUT}"
       return 1
     fi
   else
     info "Creating rule ${RULE_NAME}"
-    FULL_COMMAND="${COMMAND} istioctl create --namespace "${NAMESPACE}" -f "${RULE_FILE}""
+    FULL_COMMAND="${COMMAND} ${ISTIOCTL} create --namespace "${NAMESPACE}" -f "${RULE_FILE}""
     if ! OUTPUT=$(${FULL_COMMAND}); then
       warning "Deploy create rule failed: ${OUTPUT}"
       return 1
@@ -358,7 +358,7 @@ deploy_rule() {
   success "$(printf "%s" "${OUTPUT}" | tr '\n' ',')"
 
   # TODO: get all rules, then those just deployed
-  #  istioctl get routerules -o yaml
+  #  ${ISTIOCTL} get routerules -o yaml
 
   if [[ "${DRY_RUN:-}" == 1 ]]; then
     SLEEP=0
@@ -438,7 +438,7 @@ deploy_resource() {
   info "Deploying resource with sidecar bypass IP ranges: ${RANGES//,/ }"
 
   if ! RESOURCE_YAML=$(
-    istioctl kube-inject --namespace "${NAMESPACE}" \
+    ${ISTIOCTL} kube-inject --namespace "${NAMESPACE}" \
       -f "${DEPLOYMENT_FILE}" \
       --includeIPRanges="${RANGES}" \
       | sed 's/imagePullPolicy: Always/imagePullPolicy: IfNotPresent/g ; s/"imagePullPolicy":"Always"/"imagePullPolicy":"IfNotPresent"/g'

@@ -8,7 +8,7 @@ declare -r THIS_SCRIPT="${DIR}/$(basename "$0")"
 
 cd "${DIR}"
 
-ISTIO_DIR=$(find . -maxdepth 1 -type d -regex './istio-[0-9\.]+' | sort -g | tail -n 1)
+ISTIO_DIR=$(find . -maxdepth 1 -type d -regex './istio-[0-9\.]+' | sort --version-sort | tail -n 1)
 ISTIOCTL="${DIR}/${ISTIO_DIR}/bin/istioctl"
 
 # this is for cleanup.sh
@@ -67,6 +67,8 @@ main() {
   # kubectl -n istio-system create secret tls ingress-certs --key /tmp/tls.key --cert /tmp/tls.crt
 
   sleep 30
+
+  kubectl get service -n istio-system
 
   istio_apply "${ISTIO_DIR}"/samples/bookinfo/kube/bookinfo.yaml
 
