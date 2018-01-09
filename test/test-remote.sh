@@ -19,7 +19,7 @@ CLUSTER_NAME="test-theseus"
 DEFAULT_PROJECT="binarysludge-20170716-2"
 DEFAULT_ZONE="europe-west2-a"
 PREEMPTIBLE="--preemptible"
-CLUSTER_VERSION="1.8.3-gke.0"
+CLUSTER_VERSION=$(gcloud container get-server-config | grep 'validMasterVersions:' -A 1 | awk '/^- /{print $2}')
 
 check_for_gcloud() {
   if ! command gcloud &>/dev/null; then
