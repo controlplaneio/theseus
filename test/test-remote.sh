@@ -72,6 +72,7 @@ deploy_cluster() {
     --machine-type n1-highcpu-8 \
     --enable-autorepair \
     --no-enable-legacy-authorization \
+    --enable-network-policy \
     ${PREEMPTIBLE} \
     --cluster-version=${CLUSTER_VERSION} \
     --num-nodes 2 2>&1); then
