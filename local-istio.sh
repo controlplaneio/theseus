@@ -214,8 +214,10 @@ gcloud-quota-check() {
 
 check_is_test_cluster() {
   if ! kubectl config current-context | grep -E '^gke_binarysludge-20[0-9\-]{6,}_europe-west.-._test'; then
-    echo "ERROR! Not a test cluster!"
-    exit 1
+    if ! kubectl config current-context | grep -E '^gke_weave-demo-20[0-9\-]{6,}_europe-west.-._test'; then
+      echo "ERROR! Not a test cluster!"
+      exit 1
+    fi
   fi
 }
 
@@ -241,7 +243,7 @@ wait_for_no_pods() {
   local POD="${1}"
   local TIMEOUT=30
   local COUNT=1
-  while [[ $(kubectl get pods --all-namespaces -o name | grep -q -E "^pods/${POD}") ]]; do
+  while [[ $(kubectl get pods --all-namespaces -o name | grep -E "^pods/${POD}" --count) != 0 ]]; do
     let COUNT=$((COUNT + 1))
     [[ "$COUNT" -gt "${TIMEOUT}" ]] && {
       echo "Timeout"
