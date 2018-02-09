@@ -214,9 +214,11 @@ gcloud-quota-check() {
 
 check_is_test_cluster() {
   if ! kubectl config current-context | grep -E '^gke_binarysludge-20[0-9\-]{6,}_europe-west.-._test'; then
-    if ! kubectl config current-context | grep -E '^gke_weave-demo-20[0-9\-]{6,}_europe-west.-._test'; then
-      echo "ERROR! Not a test cluster!"
-      exit 1
+    if ! kubectl config current-context | grep -E '^gke_weave-demo-.*_europe-west.-._test'; then
+      if ! kubectl config current-context | grep -E '^gke_controlplane-dev-.*_europe-west.-._test'; then
+        echo "ERROR! Not a test cluster!"
+        exit 1
+      fi
     fi
   fi
 }

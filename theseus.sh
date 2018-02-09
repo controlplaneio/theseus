@@ -513,7 +513,8 @@ wait_for_url() {
     -w '%{http_code}' \
     --header "${HTTP_HEADER}: ${HTTP_HEADER_REGEX}" \
     ${URL}) == 200 ]]; do
-    let DURATION='SECONDS - START_SECONDS' || true
+
+    let DURATION=$((SECONDS - START_SECONDS))
     let COUNT=$((COUNT + 1))
     [[ "$COUNT" -gt "${TIMEOUT}" ]] && {
       # TODO: show failed curl headers here
@@ -821,7 +822,7 @@ parse_arguments() {
       --debug-file)
         DEBUG=1
         set -xe
-        exec 2> >(tee --ignore-interrupts /tmp/debug >/dev/null)
+          # exec 2> >(tee --ignore-interrupts /tmp/debug >/dev/null)
         ;;
       --)
         shift
