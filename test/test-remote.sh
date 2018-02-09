@@ -19,7 +19,6 @@ CLUSTER_NAME="test-theseus"
 DEFAULT_PROJECT="binarysludge-20170716-2"
 DEFAULT_ZONE="europe-west2-a"
 PREEMPTIBLE="--preemptible"
-CLUSTER_VERSION=$(gcloud container get-server-config | grep 'validMasterVersions:' -A 1 | awk '/^- /{print $2}')
 
 check_for_gcloud() {
   if ! command gcloud &>/dev/null; then
@@ -68,6 +67,7 @@ get_master_versions() {
 
 deploy_cluster() {
   local OUTPUT
+  local CLUSTER_VERSION=$(gcloud container get-server-config | grep 'validMasterVersions:' -A 1 | awk '/^- /{print $2}')
   if ! OUTPUT=$( (yes || true) | gcloud container clusters create "${CLUSTER_NAME}" \
     --machine-type n1-highcpu-8 \
     --enable-autorepair \
