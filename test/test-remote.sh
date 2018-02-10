@@ -18,7 +18,7 @@ declare -r THIS_SCRIPT="${DIR}/$(basename "$0")"
 CLUSTER_NAME="${CLUSTER_NAME:-test-theseus}"
 DEFAULT_PROJECT="${DEFAULT_PROJECT:-binarysludge-20170716-2}"
 DEFAULT_ZONE="${DEFAULT_ZONE:-europe-west2-a}"
-PREEMPTIBLE="--preemptible"
+PREEMPTIBLE="${PREEMPTIBLE:- --preemptible}"
 
 check_for_gcloud() {
   if ! command gcloud &>/dev/null; then

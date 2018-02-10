@@ -195,7 +195,7 @@ rollback() {
   trap - EXIT
   warning "Performing rollback"
   warning "Jobs: $(jobs)"
-#  warning "Debubg: $(ps fauxwww)"
+  #  warning "Debubg: $(ps fauxwww)"
   if [[ -n "${TIMEOUT_PID:-}" ]] && pgrep "${TIMEOUT_PID}"; then
     kill "${TIMEOUT_PID}"
   fi
