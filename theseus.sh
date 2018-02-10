@@ -30,6 +30,8 @@
 ##   --undeploy [name]           Name of deployment to remove
 ##   --delete                    Remove existing deployment and route
 ##
+##   --healthcheck               Check health of installation
+##
 ##   --debug                     More debug
 ##   --debug-file                Debug to /tmp/debug
 ##   --dry-run                   Dry-run; only show what would be done
@@ -62,7 +64,9 @@ FILENAME=''
 RULE_FILE=''
 TIMEOUT_PID=''
 
-MIN_ISTIO_VERSION="0.2.10"
+IS_HEALTHCHECK=0
+
+MIN_ISTIO_VERSION="0.5.0"
 
 check_kubernetes_version() {
   if ! local KUBERNETES_VERSION=$(kubectl version --short \
@@ -76,7 +80,7 @@ check_kubernetes_version() {
 
 check_istio_version() {
   if ! local ISTIO_VERSION=$(istioctl version \
-    | awk '/^Version:/{ print $2 }'); then
+    |& awk '/^Version:/{ print $2 }'); then
     error "Failed to get istio version"
   fi
   if ! check_version ${MIN_ISTIO_VERSION} ${ISTIO_VERSION}; then
@@ -102,16 +106,20 @@ set_timeout() {
   fi
 }
 
+healthcheck() {
+  check_kubernetes_version
+  check_istio_version
+}
+
 main() {
   # TODO: this doesn't work as a system-wide binary
-  cd "${RESOLVED_DIR}"
+  cd "${RESOLVED_DIR}" &>/dev/null
 
   handle_arguments "$@"
 
   #  set_timeout
 
-  check_kubernetes_version
-  check_istio_version
+  healthcheck
 
   if [[ -n "${BACKUP_TARGET:-}" ]]; then
     backup_resource
@@ -575,6 +583,14 @@ EOF
 validate_arguments() {
   FILENAME="${ARGUMENTS[0]:-}"
 
+  if [[ "${IS_HEALTHCHECK:-}" == 1 ]]; then
+    if ! healthcheck; then
+      error "Local healthcheck failed"
+    fi
+    success "Local installation (not Istio!) healthy"
+    exit 0
+  fi
+
   [[ -z "${FILENAME:-}" ]] && error "Filename required"
   [[ ! -f "${FILENAME:-}" ]] && error "File ${FILENAME} not found"
 
@@ -813,6 +829,9 @@ parse_arguments() {
         not_empty_or_usage "${1:-}"
         TIMEOUT_TEST_DELAY_LENGTH="$1"
         ;;
+      --healthcheck)
+        IS_HEALTHCHECK=1
+        ;;
       -n | --dry-run) DRY_RUN=1 ;;
       -h | --help) usage ;;
       --debug)
@@ -914,6 +933,7 @@ wait-safe() {
 check_version() {
   local MIN_VERSION="${1#v}"
   local ACTUAL_VERSION="${2#v}"
+  ACTUAL_VERSION="${ACTUAL_VERSION/-*/}"
   local LOWEST_VERSION=$(
     {
       echo $MIN_VERSION
@@ -948,8 +968,8 @@ if ! is_sourced; then
   export COLOUR_WHITE=$(tput setaf 7 :-"" 2>/dev/null)
   export COLOUR_RESET=$(tput sgr0 :-"" 2>/dev/null)
 
-  echo | tee -a "${DIR}"/debug.log
-  success "Starting theseus" &>/dev/null
+  printf "\n\nStarting at $(date)\n\n" | tee -a "${DIR}"/debug.log >/dev/null
+#  success "Starting theseus"
 
   main "$@"
 fi
