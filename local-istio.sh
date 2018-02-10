@@ -52,6 +52,10 @@ main() {
 
   # TODO(ajm): programmatically infer user
   echo 'Creating temporary clusterrolebinding - remove when supported by istio'
+  kubectl create clusterrolebinding "cluster-admin-$(whoami)" \
+    --clusterrole=cluster-admin \
+    --user="$(gcloud config get-value core/account)"
+
   kubectl create clusterrolebinding my-admin-access --clusterrole cluster-admin --user sublimino@gmail.com || true
   kubectl create clusterrolebinding my-admin-access-1 --clusterrole cluster-admin --user minikube || true
   kubectl create clusterrolebinding my-admin-access-2 --clusterrole cluster-admin --user k8s-deploy-bot@binarysludge-20170716-2.iam.gserviceaccount.com || true
@@ -115,7 +119,7 @@ main() {
     fi
   done
 
-  ${ISTIOCTL} create -f "${ROUTE_RULES}"
+  ${ISTIOCTL} create -f "${ROUTE_RULES}" || true
 
   istio_apply test/theseus/asset/reviews-service.yaml
   istio_apply test/theseus/asset/reviews-deployment-v1.yaml

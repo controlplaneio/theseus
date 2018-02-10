@@ -481,7 +481,14 @@ is_gke() {
 
 get_gateway_url() {
   # TODO(0.2.4): fix as per https://github.com/istio/issues/issues/67
-  local GATEWAY_URL=$(kubectl get po -l istio=ingress -o 'jsonpath={.items[0].status.hostIP}'):$(kubectl get svc istio-ingress -o 'jsonpath={.spec.ports[0].nodePort}')
+  local GATEWAY_URL
+  GATEWAY_URL=$(kubectl get pod \
+    -l istio=ingress \
+    -n istio-system \
+    -o 'jsonpath={.items[0].status.hostIP}'):$(kubectl get svc \
+    istio-ingress \
+    -n istio-system \
+    -o 'jsonpath={.spec.ports[0].nodePort}')
 
   if [[ -z "${GATEWAY_URL:-}" ]] || is_gke; then
     info "GKE detected, getting gateway ingress IP"
@@ -539,7 +546,7 @@ test_resource() {
   if [[ "${DRY_RUN:-}" == 1 ]]; then
     return 0
   fi
-  local MAX_ATTEMPTS=10
+  local MAX_ATTEMPTS=5
   local START_SECONDS="${SECONDS}"
   local DURATION=0
   export GATEWAY_URL=$(get_gateway_url)
@@ -551,7 +558,8 @@ test_resource() {
 
   info "Test command is: ${TEST_EVAL:-}"
 
-  local INTERPOLATED_TEST_EVAL=$(
+  local INTERPOLATED_TEST_EVAL
+  INTERPOLATED_TEST_EVAL=$(
     envsubst <<EOF
 ${TEST_EVAL:-}
 EOF
@@ -561,8 +569,10 @@ EOF
   for BACKOFF in $(seq 1 ${MAX_ATTEMPTS}); do
     sleep $((3 * BACKOFF))
     info "Running test command ${BACKOFF}/${MAX_ATTEMPTS}"
-    local RESULT=$(eval "${TEST_EVAL:-}")
-    local STATUS_CODE=$?
+    local RESULT
+    local STATUS_CODE
+    RESULT=$(eval "${TEST_EVAL:-}")
+    STATUS_CODE=$?
     if [[ "$STATUS_CODE" -eq 0 ]]; then
       break
     fi

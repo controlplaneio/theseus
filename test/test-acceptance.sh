@@ -35,6 +35,7 @@ declare -a ARGUMENTS
 EXPECTED_NUM_ARGUMENTS=0
 ARGUMENTS=()
 FILENAME=''
+THIS_TEST=""
 
 main() {
   handle_arguments "$@"
@@ -67,17 +68,6 @@ main() {
   # assert_line
   # refute_line
 
-  function assert_success() {
-    [[ $? -eq 0 ]]
-  }
-
-  function assert_failure() {
-    [[ $? -gt 0 ]]
-  }
-
-  test() {
-    info "TEST: ${1}" | tee ../../debug.log
-  }
 
   test "finds application and cleans debug log"
   {
@@ -117,13 +107,29 @@ main() {
     assert_success
   }
 
-  test "cleans route rules"
+  test "cleans all route rules"
   {
 
     ${APP} test/theseus/asset/reviews-deployment-v1.yaml \
       --delete \
       --cookie cookie \
       ${DEBUG_FLAG}
+
+    ${APP} test/theseus/asset/reviews-deployment-v2.yaml \
+      --delete \
+      --cookie cookie \
+      ${DEBUG_FLAG}
+
+    ${APP} test/theseus/asset/reviews-deployment-v3.yaml \
+      --delete \
+      --cookie cookie \
+      ${DEBUG_FLAG}
+
+    istioctl get routerules \
+      | tail -n +2 \
+      | awk "/^${RULE_NAME:-.}/{print \$1}" \
+      | sort \
+      | xargs --no-run-if-empty istioctl delete routerule -n default
 
     assert_success
   }
@@ -182,7 +188,16 @@ main() {
   # assert_line
   # refute_line
 
-  test "deploy reviews v2"
+  test "deploy reviews v1"
+  {
+
+    ${APP} test/theseus/asset/reviews-deployment-v1.yaml \
+      ${DEBUG_FLAG} \
+      --cookie choc-chip
+    assert_success
+  }
+
+    test "deploy reviews v2"
   {
 
     ${APP} test/theseus/asset/reviews-deployment-v2.yaml \
@@ -212,7 +227,7 @@ main() {
     assert_success
   }
 
-  test "Failing deploy"
+  test "Intentionally failing deploy"
   {
 
     # intentionally failing deployment (service starts, healthchecks, fails after 5s)
@@ -229,13 +244,35 @@ main() {
       exit 1
     fi
 
-    success "Intentionally failing deploy: passed"
+    assert_success
   }
 
   success "test suite passed"
   trap - EXIT
 
 }
+
+
+  function assert_success() {
+    if [[ $? -eq 0 ]]; then
+      success "PASS: ${THIS_TEST}"
+    else
+      error "FAIL: ${THIS_TEST}"
+    fi
+  }
+
+  function assert_failure() {
+    if [[ $? -gt 0 ]]; then
+      success "PASS: ${THIS_TEST}"
+    else
+      error "FAIL: ${THIS_TEST}"
+    fi
+  }
+
+  test() {
+    THIS_TEST="${1}"
+    info "TEST: ${THIS_TEST}" | tee ../../debug.log
+  }
 
 handle_arguments() {
   [[ $# = 0 && ${EXPECTED_NUM_ARGUMENTS} -gt 0 ]] && usage
