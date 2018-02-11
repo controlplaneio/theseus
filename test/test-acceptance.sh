@@ -57,6 +57,31 @@ main() {
   APP="timeout --foreground --kill-after=15s 300s ${BIN}"
   DRY_RUN_DEFAULTS="test/theseus/asset/beefjerky-deployment-v1.yaml --dry-run"
 
+  if [[ "${IS_MINIKUBE:-}" == "" ]]; then
+    if kubectl config current-context | grep -qE '^gke_'; then
+      IS_MINIKUBE=0
+    else
+      IS_MINIKUBE=1
+    fi
+  fi
+
+  if [[ "${GATEWAY_URL:-}" == "" ]]; then
+    if [[ "${IS_MINIKUBE}" == 1 ]]; then
+      GATEWAY_URL=$(kubectl get pod \
+        --namespace istio-system \
+        -l istio=ingress \
+        -o 'jsonpath={.items[0].status.hostIP}'):$(kubectl get svc \
+          --namespace istio-system \
+          istio-ingress \
+          -o 'jsonpath={.spec.ports[0].nodePort}')
+    else
+      GATEWAY_URL=$(kubectl get ingress gateway \
+        -o 'jsonpath={.status.loadBalancer.ingress[].ip}')
+    fi
+  fi
+  set -x
+
+  echo "Gateway URL: ${GATEWAY_URL}"
 
   # assert
   # refute
@@ -68,6 +93,30 @@ main() {
   # assert_line
   # refute_line
 
+  test "preemptively deploys bookinfo"
+  {
+    (
+      set -x
+      cd "${DIR}"/..
+      PIDS=""
+      local ISTIO_VERSION=$(find . -maxdepth 1 -name 'istio-*' -type d | sort --version-sort | head -n1)
+      kubectl delete -f <(istioctl kube-inject -f "${ISTIO_VERSION}"/samples/bookinfo/kube/bookinfo.yaml) || true
+      kubectl apply -f <(istioctl kube-inject -f "${ISTIO_VERSION}"/samples/bookinfo/kube/bookinfo-slim.yaml) || true
+      #      kubectl delete deployment reviews-v2 & PIDS="${PIDS} $!"
+      #      kubectl delete deployment reviews-v3 & PIDS="${PIDS} $!"
+
+      istioctl get routerules \
+        | tail -n +2 \
+        | awk "/^${RULE_NAME:-.}/{print \$1}" \
+        | sort \
+        | xargs --no-run-if-empty istioctl delete routerule -n default &
+      PIDS="${PIDS} $!"
+
+      wait_safe "${PIDS}"
+      try-slow-backoff "curl -s http://${GATEWAY_URL}/productpage | grep Reviewer1"
+
+    )
+  }
 
   test "finds application and cleans debug log"
   {
@@ -80,101 +129,30 @@ main() {
 
   test "patches ingress default host to productpage "
   {
-
     if ! kubectl describe ingress gateway | grep -qE '/hello.*helloworld:5000'; then
       kpatch-ingress gateway "" productpage 9080
     fi
 
     assert_success
   }
+
   test "patches ingress /hello to helloworld"
   {
-
     if ! kubectl describe ingress gateway | grep -qE '/hello.*helloworld:5000'; then
       kpatch-ingress gateway /hello helloworld 5000
     fi
     assert_success
   }
 
-  test "accepts timeout value of 1s"
-  {
-    set -x
-    ${APP} test/theseus/asset/reviews-deployment-v1.yaml \
-      --timeout 1 \
-      --cookie cookie \
-      ${DEBUG_FLAG}
-
-    assert_success
-  }
-
-  test "cleans all route rules"
-  {
-
-    ${APP} test/theseus/asset/reviews-deployment-v1.yaml \
-      --delete \
-      --cookie cookie \
-      ${DEBUG_FLAG}
-
-    ${APP} test/theseus/asset/reviews-deployment-v2.yaml \
-      --delete \
-      --cookie cookie \
-      ${DEBUG_FLAG}
-
-    ${APP} test/theseus/asset/reviews-deployment-v3.yaml \
-      --delete \
-      --cookie cookie \
-      ${DEBUG_FLAG}
-
-    istioctl get routerules \
-      | tail -n +2 \
-      | awk "/^${RULE_NAME:-.}/{print \$1}" \
-      | sort \
-      | xargs --no-run-if-empty istioctl delete routerule -n default
-
-    assert_success
-  }
-
-  test "cleans state deployment v1"
-  {
-
-    ${APP} test/theseus/asset/reviews-deployment-v1.yaml \
-      --delete \
-      --cookie cookie \
-      ${DEBUG_FLAG}
-
-    assert_success
-  }
-
-  test "cleans state deployment v2"
-  {
-
-    ${APP} test/theseus/asset/reviews-deployment-v2.yaml \
-      --delete \
-      ${DEBUG_FLAG}
-
-    assert_success
-  }
-
-  test "waits for no reviews pods"
-  {
-
-    wait_for_no_pods reviews
-    assert_success
-  }
-
   test "waits for root ingress to resolve"
   {
-
-    INGRESS_IP=$(kubectl describe ingress gateway | awk '/Address/{print $2}')
-    wait_for_ingress_route http://${INGRESS_IP}
+    wait_for_ingress_route http://${GATEWAY_URL}
     assert_success
   }
 
   test "waits for productpage ingress to resolve"
   {
-
-    INGRESS_IP=$(kubectl describe ingress gateway | awk '/Address/{print $2}')
-    wait_for_ingress_route http://${INGRESS_IP}/productpage
+    wait_for_ingress_route http://${GATEWAY_URL}/productpage
     assert_success
   }
 
@@ -188,91 +166,119 @@ main() {
   # assert_line
   # refute_line
 
-  test "deploy reviews v1"
-  {
-
-    ${APP} test/theseus/asset/reviews-deployment-v1.yaml \
-      ${DEBUG_FLAG} \
-      --cookie choc-chip
-    assert_success
-  }
-
-    test "deploy reviews v2"
-  {
-
-    ${APP} test/theseus/asset/reviews-deployment-v2.yaml \
-      ${DEBUG_FLAG} \
-      --cookie choc-chip \
-      --test "test \$(curl -A 'Mozilla/4.0' --compressed --connect-timeout 5 \
+  TEST_V2="test \$(curl -A 'Mozilla/4.0' --compressed --connect-timeout 5 \
      --header 'cookie: choc-chip' \
      --max-time 5  \"http://\${GATEWAY_URL}/productpage\" \
      | grep -o '\bglyphicon-star\b' \
      | wc -l) -ge 10"
-    assert_success
-  }
 
-  test "deploy reviews v3"
-  {
-
-    ${APP} test/theseus/asset/reviews-deployment-v3.yaml \
-      ${DEBUG_FLAG} \
-      --cookie rasperry \
-      --test "test \$(curl -A 'Mozilla/4.0' --compressed --connect-timeout 5 \
+  TEST_V3="test \$(curl -A 'Mozilla/4.0' --compressed --connect-timeout 5 \
      --header 'cookie: raspberry' \
      --max-time 5  \"http://\${GATEWAY_URL}/productpage\" \
      | grep '\bglyphicon-star\b' \
      | grep --fixed-strings '<font color=\"red\">' \
      | wc -l) -eq 1"
 
-    assert_success
-  }
-
-  test "Intentionally failing deploy"
+  test "deploy reviews v2"
   {
-
-    # intentionally failing deployment (service starts, healthchecks, fails after 5s)
-    if ${APP} test/theseus/asset/bad-ghost-deployment.yaml \
+    ${APP} test/theseus/asset/reviews-deployment-v2.yaml \
       ${DEBUG_FLAG} \
-      --user-agent '.*' \
-      --test "test \$(curl -A 'Mozilla/4.0' --compressed --connect-timeout 5 \
-     --max-time 5  \"http://\${GATEWAY_URL}/productpage\" \
-     | grep '\bglyphicon-star\b' \
-     | grep --fixed-strings '<font color=\"red\">' \
-     | wc -l) -eq 1"; then
-
-      echo "Supposed to return non-zero"
-      exit 1
-    fi
-
+      --cookie choc-chip \
+      --test "${TEST_V2}"
     assert_success
   }
+
+  #  test "deploy reviews v3"
+  #  {
+  #
+  #    ${APP} test/theseus/asset/reviews-deployment-v3.yaml \
+  #      ${DEBUG_FLAG} \
+  #      --cookie rasperry \
+  #      --test "${TEST_V3}"
+  #
+  #    assert_success
+  #  }
+  #
+  #  test "Intentionally failing deploy"
+  #  {
+  #
+  #    # intentionally failing deployment (service starts, healthchecks, fails after 5s)
+  #    if ${APP} test/theseus/asset/bad-ghost-deployment.yaml \
+  #      ${DEBUG_FLAG} \
+  #      --user-agent '.*' \
+  #      --test "test \$(curl -A 'Mozilla/4.0' --compressed --connect-timeout 5 \
+  #     --max-time 5  \"http://\${GATEWAY_URL}/productpage\" \
+  #     | grep '\bglyphicon-star\b' \
+  #     | grep --fixed-strings '<font color=\"red\">' \
+  #     | wc -l) -eq 1"; then
+  #
+  #      echo "Supposed to return non-zero"
+  #      exit 1
+  #    fi
+  #
+  #    assert_success
+  #  }
 
   success "test suite passed"
   trap - EXIT
 
 }
 
+try-slow-backoff() {
+  _TRY_LIMIT_SLEEP=1
+  _TRY_LIMIT_BACKOFF=8
+  try-limit 0 "${@}"
+}
 
-  function assert_success() {
-    if [[ $? -eq 0 ]]; then
-      success "PASS: ${THIS_TEST}"
+try-limit() {
+  local LIMIT=$1
+  local COUNT=1
+  local RETURN_CODE
+  shift
+  echo "Limit ${LIMIT}, trying: $*" | h '.*' 1>&2
+  until eval $(echo $@); do
+    RETURN_CODE=$?
+    printf "\n$(date): %s - " "$*" 1>&2
+    let COUNT=COUNT+1
+    if [[ "${_TRY_LIMIT_BACKOFF:-}" != "" ]]; then
+      sleep $(((COUNT * _TRY_LIMIT_BACKOFF) / 10))
     else
-      error "FAIL: ${THIS_TEST}"
+      sleep ${_TRY_LIMIT_SLEEP:-0.3}
     fi
-  }
-
-  function assert_failure() {
-    if [[ $? -gt 0 ]]; then
-      success "PASS: ${THIS_TEST}"
-    else
-      error "FAIL: ${THIS_TEST}"
+    if [[ $LIMIT -gt 0 && $COUNT -gt $LIMIT ]]; then
+      echo "Failed after $COUNT iterations" 1>&2
+      return 1
     fi
-  }
+  done
+  RETURN_CODE=$?
+  echo "Completed after $COUNT iterations" | h '.*' 1>&2
+  unset _TRY_LIMIT_SLEEP _TRY_LIMIT_BACKOFF
+  return $RETURN_CODE
+}
 
-  test() {
-    THIS_TEST="${1}"
-    info "TEST: ${THIS_TEST}" | tee ../../debug.log
-  }
+function assert_success() {
+  if [[ $? -eq 0 ]]; then
+    success "PASS: ${THIS_TEST}"
+  else
+    error "FAIL: ${THIS_TEST}"
+  fi
+}
+
+function assert_failure() {
+  if [[ $? -gt 0 ]]; then
+    success "PASS: ${THIS_TEST}"
+  else
+    error "FAIL: ${THIS_TEST}"
+  fi
+}
+
+test() {
+  THIS_TEST="${1}"
+  info "TEST: ${THIS_TEST}" | tee ../../debug.log
+  if [[ -n "${2:-}" ]]; then
+    "${2}"
+  fi
+}
 
 handle_arguments() {
   [[ $# = 0 && ${EXPECTED_NUM_ARGUMENTS} -gt 0 ]] && usage

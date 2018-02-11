@@ -81,7 +81,7 @@ main() {
   export GATEWAY_URL
 
   if [[ "${IS_MINIKUBE}" == 1 ]]; then
-    GATEWAY_URL=$(kubectl get po \
+    GATEWAY_URL=$(kubectl get pod \
       --namespace istio-system \
       -l istio=ingress \
       -o 'jsonpath={.items[0].status.hostIP}'):$(kubectl get svc \
@@ -98,18 +98,18 @@ main() {
 
   wait_for_productpage
 
-  sleep 10
+  sleep 2
 
-  if command xdg-open &>/dev/null; then
+  if command -v xdg-open &>/dev/null; then
     xdg-open "http://${GATEWAY_URL}/productpage"
   fi
 
-  sleep 5
+  sleep 2
 
   echo "Deleting reviews service and deployments"
   kubectl delete -f test/theseus/asset || true
 
-  sleep 3
+  sleep 5
 
   echo "Deploying service and v1"
   ROUTE_RULES="${ISTIO_DIR}"/samples/bookinfo/kube/route-rule-all-v1.yaml
@@ -161,7 +161,6 @@ wait_for_productpage() {
     }
     sleep $((5 * (COUNT + 10) / 10))
   done
-
 }
 
 minikube-import() {

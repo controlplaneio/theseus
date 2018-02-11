@@ -209,7 +209,7 @@ rollback() {
   fi
   delete_route_and_deployment
   warning "Rollback complete"
-  cat "${DIR}"/debug.log
+#  cat "${DIR}"/debug.log
   exit 1
 }
 
@@ -254,6 +254,7 @@ delete_route_and_deployment() {
   check_for_autoscaler
 
   if [[ "${DRY_RUN:-}" == 0 ]] && is_rule_deployed "${RULE_NAME}"; then
+    warning "Deleting routerule ${RULE_NAME}"
     ${ISTIOCTL} --namespace "${NAMESPACE}" delete routerule "${RULE_NAME}"
   fi
 
@@ -692,6 +693,7 @@ kind: RouteRule
 metadata:
   name: ${RULE_NAME}
   namespace: ${NAMESPACE}
+  owner: theseus
 spec:
   destination:
     name: ${DESTINATION}
@@ -757,86 +759,102 @@ handle_arguments() {
 }
 
 parse_arguments() {
+  local THIS_ARG
   while [ $# -gt 0 ]; do
     case $1 in
       --tag)
+        THIS_ARG="${1}"
         shift
-        not_empty_or_usage "${1:-}"
+        not_empty_or_usage "${1:-}" "${THIS_ARG}"
         TAG="$1"
         ;;
       --tag-name)
+        THIS_ARG="${1}"
         shift
-        not_empty_or_usage "${1:-}"
+        not_empty_or_usage "${1:-}" "${THIS_ARG}"
         TAG_NAME="$1"
         ;;
       --weight)
+        THIS_ARG="${1}"
         shift
-        not_empty_or_usage "${1:-}"
+        not_empty_or_usage "${1:-}" "${THIS_ARG}"
         ROUTE_WEIGHT="$1"
         ;;
       --precedence)
+        THIS_ARG="${1}"
         shift
-        not_empty_or_usage "${1:-}"
+        not_empty_or_usage "${1:-}" "${THIS_ARG}"
         RULE_PRECEDENCE="$1"
         ;;
       --name)
+        THIS_ARG="${1}"
         shift
-        not_empty_or_usage "${1:-}"
+        not_empty_or_usage "${1:-}" "${THIS_ARG}"
         RULE_NAME="$1"
         ;;
       --header)
+        THIS_ARG="${1}"
         shift
-        not_empty_or_usage "${1:-}"
+        not_empty_or_usage "${1:-}" "${THIS_ARG}"
         HTTP_HEADER="$1"
         ;;
       --regex)
+        THIS_ARG="${1}"
         shift
-        not_empty_or_usage "${1:-}"
+        not_empty_or_usage "${1:-}" "${THIS_ARG}"
         HTTP_HEADER_REGEX="$1"
         ;;
       --cookie)
+        THIS_ARG="${1}"
         shift
-        not_empty_or_usage "${1:-}"
+        not_empty_or_usage "${1:-}" "${THIS_ARG}"
         HTTP_HEADER="cookie"
         HTTP_HEADER_REGEX="$1"
         ;;
       --user-agent)
+        THIS_ARG="${1}"
         shift
-        not_empty_or_usage "${1:-}"
+        not_empty_or_usage "${1:-}" "${THIS_ARG}"
         HTTP_HEADER="user-agent"
         HTTP_HEADER_REGEX="$1"
         ;;
       --test)
+        THIS_ARG="${1}"
         shift
-        not_empty_or_usage "${1:-}"
+        not_empty_or_usage "${1:-}" "${THIS_ARG}"
         TEST_EVAL="$1"
         ;;
       --test-url)
+        THIS_ARG="${1}"
         shift
-        not_empty_or_usage "${1:-}"
+        not_empty_or_usage "${1:-}" "${THIS_ARG}"
         TEST_URL="$1"
         ;;
       --delete)
         IS_DELETE="1"
         ;;
       --backup)
+        THIS_ARG="${1}"
         shift
-        not_empty_or_usage "${1:-}"
+        not_empty_or_usage "${1:-}" "${THIS_ARG}"
         BACKUP_TARGET="$1"
         ;;
       --undeploy)
+        THIS_ARG="${1}"
         shift
-        not_empty_or_usage "${1:-}"
+        not_empty_or_usage "${1:-}" "${THIS_ARG}"
         UNDEPLOY_TARGET="$1"
         ;;
       --timeout)
+        THIS_ARG="${1}"
         shift
-        not_empty_or_usage "${1:-}"
+        not_empty_or_usage "${1:-}" "${THIS_ARG}"
         TIMEOUT_LENGTH="$1"
         ;;
       --timeout-test-delay)
+        THIS_ARG="${1}"
         shift
-        not_empty_or_usage "${1:-}"
+        not_empty_or_usage "${1:-}" "${THIS_ARG}"
         TIMEOUT_TEST_DELAY_LENGTH="$1"
         ;;
       --healthcheck)
@@ -915,7 +933,11 @@ is_empty() {
 }
 
 not_empty_or_usage() {
-  is_empty ${1-} && usage "Non-empty value required" || return 0
+  local EXTRA_DEBUG
+  if [[ "${2:-}" != "" ]]; then
+    EXTRA_DEBUG="for flag ${2}"
+  fi
+  is_empty ${1-} && usage "Non-empty value required ${EXTRA_DEBUG}" || return 0
 }
 
 check_number_of_expected_arguments() {
