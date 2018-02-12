@@ -52,15 +52,20 @@ main() {
 
   # TODO(ajm): programmatically infer user
   echo 'Creating temporary clusterrolebinding - remove when supported by istio'
+  kubectl delete clusterrolebinding "cluster-admin-$(whoami)"  || true
   kubectl create clusterrolebinding "cluster-admin-$(whoami)" \
     --clusterrole=cluster-admin \
     --user="$(gcloud config get-value core/account)"
 
-  kubectl create clusterrolebinding my-admin-access --clusterrole cluster-admin --user sublimino@gmail.com || true
-  kubectl create clusterrolebinding my-admin-access-1 --clusterrole cluster-admin --user minikube || true
-  kubectl create clusterrolebinding my-admin-access-2 --clusterrole cluster-admin --user k8s-deploy-bot@binarysludge-20170716-2.iam.gserviceaccount.com || true
+  kubectl delete clusterrolebinding admin-access  || true
+  kubectl delete clusterrolebinding admin-access-1 || true
+  kubectl delete clusterrolebinding admin-access-2 || true
 
-  echo "deploying istio from ${ISTIO_DIR}"
+  kubectl create clusterrolebinding admin-access --clusterrole cluster-admin --user sublimino@gmail.com || true
+  kubectl create clusterrolebinding admin-access-1 --clusterrole cluster-admin --user minikube || true
+  kubectl create clusterrolebinding admin-access-2 --clusterrole cluster-admin --user k8s-deploy-bot@binarysludge-20170716-2.iam.gserviceaccount.com || true
+
+  echo "deploying istio-system from ${ISTIO_DIR}"
   # cat "${ISTIO_DIR}"/install/kubernetes/istio.yaml | update_pull_policy | kubectl create -f -
   kubectl apply -f "${ISTIO_DIR}"/install/kubernetes/istio-auth.yaml
 
@@ -74,7 +79,18 @@ main() {
 
   kubectl get service -n istio-system
 
-  istio_apply "${ISTIO_DIR}"/samples/bookinfo/kube/bookinfo.yaml
+
+  echo "deploying bookinfo-slim resources"
+  istio_apply "${DIR}"/test/theseus/asset/bookinfo-slim.yaml
+
+  echo "deploying bookinfo-slim routerules"
+  ROUTE_RULES="${DIR}"/test/theseus/asset/route-rule-all-v1.yaml
+  for RULE in $(awk '/name:/{ print $2 }' "${ROUTE_RULES}"); do
+    if [[ $(${ISTIOCTL} get routerule "${RULE}") != 'No resources found.' ]]; then
+      ${ISTIOCTL} delete routerule "${RULE}"
+    fi
+  done
+  ${ISTIOCTL} create -f "${ROUTE_RULES}"
 
   sleep 3
 
@@ -105,24 +121,6 @@ main() {
   fi
 
   sleep 2
-
-  echo "Deleting reviews service and deployments"
-  kubectl delete -f test/theseus/asset || true
-
-  sleep 5
-
-  echo "Deploying service and v1"
-  ROUTE_RULES="${ISTIO_DIR}"/samples/bookinfo/kube/route-rule-all-v1.yaml
-  for RULE in $(awk '/name:/{ print $2 }' "${ROUTE_RULES}"); do
-    if [[ $(${ISTIOCTL} get routerule "${RULE}") != 'No resources found.' ]]; then
-      ${ISTIOCTL} delete routerule "${RULE}"
-    fi
-  done
-
-  ${ISTIOCTL} create -f "${ROUTE_RULES}" || true
-
-  istio_apply test/theseus/asset/reviews-service.yaml
-  istio_apply test/theseus/asset/reviews-deployment-v1.yaml
 
   if false; then
     kubectl apply --namespace kube-system -f \

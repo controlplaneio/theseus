@@ -12,7 +12,25 @@ spec:
     spec:
       containers:
       - name: reviews
-        image: istio/examples-bookinfo-reviews-v2
+        image: istio/examples-bookinfo-reviews-v2:1.5.0
         imagePullPolicy: IfNotPresent
         ports:
         - containerPort: 9080
+        livenessProbe:
+          exec:
+            command:
+            - bash
+            - -c
+            - 'exec 5<>/dev/tcp/127.0.0.1/9080 && echo -e "GET /reviews/0 HTTP/1.0\n" >&5 && head -n1 <&5 | grep 200'
+          initialDelaySeconds: 20
+          timeoutSeconds: 3
+          periodSeconds: 10
+        readinessProbe:
+          exec:
+            command:
+            - bash
+            - -c
+            - 'exec 5<>/dev/tcp/127.0.0.1/9080 && echo -e "GET /reviews/0 HTTP/1.0\n" >&5 && head -n1 <&5 | grep 200'
+          initialDelaySeconds: 20
+          timeoutSeconds: 3
+          periodSeconds: 10

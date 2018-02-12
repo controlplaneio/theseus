@@ -380,8 +380,9 @@ deploy_rule() {
 wait_for_deployment() {
   local COUNT=0
   local READY_COUNT=0
-  local SUCCESS_COUNT=15
   local COUNT_DELAY=0.2
+  local SUCCESS_COUNT=50 # 10s
+  local MAX_COUNT=600 # 120s
   local STATE
   local NAME
   local REPLICA_COUNT
@@ -411,7 +412,7 @@ wait_for_deployment() {
     elif [[ "$READY_COUNT" -gt 1 ]]; then
       warning "Deployment went from ready to not-ready, failing"
       return 1
-    elif [[ "${COUNT}" -gt 50 ]]; then
+    elif [[ "${COUNT}" -gt "${MAX_COUNT}" ]]; then
       warning "Deployment failed to be ready with replica count ${REPLICA_COUNT} and no unavailable replicas. Was: ${STATE}"
       warning "$(kubectl get deployment "${NAME}")"
       warning "$(kubectl describe deployment "${NAME}")"

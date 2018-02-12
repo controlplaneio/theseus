@@ -20,6 +20,7 @@ set -o nounset
 # error on clobber
 set -o noclobber
 
+set -x
 # user defaults
 DESCRIPTION="theseus acceptance tests"
 DEBUG="${DEBUG:-0}"
@@ -36,6 +37,12 @@ EXPECTED_NUM_ARGUMENTS=0
 ARGUMENTS=()
 FILENAME=''
 THIS_TEST=""
+
+istio-routerule-delete ()
+{
+    local RULE_NAME="${1:-}";
+    istioctl get routerules | tail -n +2 | awk "/^${RULE_NAME:-.}/{print \$1}" | sort | xargs --no-run-if-empty istioctl delete routerule -n default
+}
 
 main() {
   handle_arguments "$@"
@@ -100,16 +107,12 @@ main() {
       cd "${DIR}"/..
       PIDS=""
       local ISTIO_VERSION=$(find . -maxdepth 1 -name 'istio-*' -type d | sort --version-sort | head -n1)
-      kubectl delete -f <(istioctl kube-inject -f "${ISTIO_VERSION}"/samples/bookinfo/kube/bookinfo.yaml) || true
-      kubectl apply -f <(istioctl kube-inject -f "${ISTIO_VERSION}"/samples/bookinfo/kube/bookinfo-slim.yaml) || true
+      kubectl delete -f <(istioctl kube-inject -f "${DIR}"/test/theseus/asset/bookinfo.yaml) || true
+      kubectl apply -f <(istioctl kube-inject -f "${DIR}"/test/theseus/asset/bookinfo-slim.yaml) || true
       #      kubectl delete deployment reviews-v2 & PIDS="${PIDS} $!"
       #      kubectl delete deployment reviews-v3 & PIDS="${PIDS} $!"
 
-      istioctl get routerules \
-        | tail -n +2 \
-        | awk "/^${RULE_NAME:-.}/{print \$1}" \
-        | sort \
-        | xargs --no-run-if-empty istioctl delete routerule -n default &
+      istio-routerule-delete reviews &
       PIDS="${PIDS} $!"
 
       wait_safe "${PIDS}"
@@ -165,6 +168,21 @@ main() {
   # refute_output
   # assert_line
   # refute_line
+
+  TEST_V1="test \$(curl -A 'Mozilla/4.0' --compressed --connect-timeout 5 \
+     --header 'cookie: raspberry' \
+     --max-time 5  \"http://\${GATEWAY_URL}/productpage\" \
+     | grep -o 'Reviewer1' \
+     | wc -l) -ge 1"
+
+  test "deploy reviews v1"
+  {
+    ${APP} test/theseus/asset/reviews-deployment-v1.yaml \
+      ${DEBUG_FLAG} \
+      --cookie raspberry \
+      --test "${TEST_V1}"
+    assert_success
+  }
 
   TEST_V2="test \$(curl -A 'Mozilla/4.0' --compressed --connect-timeout 5 \
      --header 'cookie: choc-chip' \
