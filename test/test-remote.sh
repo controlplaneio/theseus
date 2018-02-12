@@ -69,7 +69,7 @@ deploy_cluster() {
   local OUTPUT
   local CLUSTER_VERSION=$(gcloud container get-server-config | grep 'validMasterVersions:' -A 1 | awk '/^- /{print $2}')
   if ! OUTPUT=$( (yes || true) | gcloud container clusters create "${CLUSTER_NAME}" \
-    --machine-type n1-highcpu-8 \
+    --machine-type n1-highcpu-16 \
     --enable-autorepair \
     --no-enable-legacy-authorization \
     --enable-network-policy \
