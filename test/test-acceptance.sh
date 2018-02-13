@@ -90,15 +90,7 @@ main() {
 
   echo "Gateway URL: ${GATEWAY_URL}"
 
-  # assert
-  # refute
-  # assert_equal
-  # assert_success
-  # assert_failure
-  # assert_output
-  # refute_output
-  # assert_line
-  # refute_line
+  # ---
 
   test "preemptively deploys bookinfo"
   {
@@ -109,6 +101,7 @@ main() {
       local ISTIO_VERSION=$(find . -maxdepth 1 -name 'istio-*' -type d | sort --version-sort | head -n1)
       kubectl delete -f <(istioctl kube-inject -f "${DIR}"/test/theseus/asset/bookinfo.yaml) || true
       kubectl apply -f <(istioctl kube-inject -f "${DIR}"/test/theseus/asset/bookinfo-slim.yaml) || true
+
       #      kubectl delete deployment reviews-v2 & PIDS="${PIDS} $!"
       #      kubectl delete deployment reviews-v3 & PIDS="${PIDS} $!"
 
@@ -162,15 +155,7 @@ main() {
     assert_success
   }
 
-  # assert
-  # refute
-  # assert_equal
-  # assert_success
-  # assert_failure
-  # assert_output
-  # refute_output
-  # assert_line
-  # refute_line
+  # ---
 
   TEST_V1="test \$(curl -A 'Mozilla/4.0' --compressed --connect-timeout 5 \
      --header 'cookie: raspberry' \
@@ -204,25 +189,25 @@ main() {
     assert_success
   }
 
+  # ---
+
   TEST_V3="test \$(curl -A 'Mozilla/4.0' --compressed --connect-timeout 5 \
-     --header 'cookie: raspberry' \
+     --header 'cookie: user=awesomeberry' \
      --max-time 5  \"http://\${GATEWAY_URL}/productpage\" \
-     | grep '\bglyphicon-star\b' \
-     | grep --fixed-strings '<font color=\"red\">' \
-     | wc -l) -eq 1"
+     | grep -E '\bglyphicon-star\b|<font color=\"red\">' \
+     | wc -l) -eq 12"
 
+    test "deploy reviews v3"
+    {
 
-  #  test "deploy reviews v3"
-  #  {
-  #
-  #    ${APP} test/theseus/asset/reviews-deployment-v3.yaml \
-  #      ${DEBUG_FLAG} \
-  #      --cookie rasperry \
-  #      --test "${TEST_V3}"
-  #
-  #    assert_success
-  #  }
-  #
+      ${APP} test/theseus/asset/reviews-deployment-v3.yaml \
+        ${DEBUG_FLAG} \
+        --cookie "^(.*?;)?(user=awesomeberry)(;.*)?$" \
+        --test "${TEST_V3}"
+
+      assert_success
+    }
+
   #  test "Intentionally failing deploy"
   #  {
   #
