@@ -175,7 +175,7 @@ main() {
   TEST_V1="test \$(curl -A 'Mozilla/4.0' --compressed --connect-timeout 5 \
      --header 'cookie: raspberry' \
      --max-time 5  \"http://\${GATEWAY_URL}/productpage\" \
-     | grep -o 'Reviewer1' \
+     | grep -Eo 'Reviewer1|\bglyphicon-star\b' \
      | wc -l) -ge 1"
 
   test "deploy reviews v1"
@@ -187,11 +187,22 @@ main() {
     assert_success
   }
 
+# ---
+
   TEST_V2="test \$(curl -A 'Mozilla/4.0' --compressed --connect-timeout 5 \
-     --header 'cookie: user=jason' \
+     --header 'cookie: user=andy' \
      --max-time 5  \"http://\${GATEWAY_URL}/productpage\" \
      | grep -o '\bglyphicon-star\b' \
      | wc -l) -ge 10"
+
+  test "deploy reviews v2"
+  {
+    ${APP} test/theseus/asset/reviews-deployment-v2.yaml \
+      ${DEBUG_FLAG} \
+      --cookie "^(.*?;)?(user=andy)(;.*)?$" \
+      --test "${TEST_V2}"
+    assert_success
+  }
 
   TEST_V3="test \$(curl -A 'Mozilla/4.0' --compressed --connect-timeout 5 \
      --header 'cookie: raspberry' \
@@ -200,14 +211,6 @@ main() {
      | grep --fixed-strings '<font color=\"red\">' \
      | wc -l) -eq 1"
 
-  test "deploy reviews v2"
-  {
-    ${APP} test/theseus/asset/reviews-deployment-v2.yaml \
-      ${DEBUG_FLAG} \
-      --cookie "^(.*?;)?(user=jason)(;.*)?$" \
-      --test "${TEST_V2}"
-    assert_success
-  }
 
   #  test "deploy reviews v3"
   #  {

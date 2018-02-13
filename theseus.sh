@@ -397,10 +397,25 @@ wait_for_deployment() {
   fi
   is_not_empty_or_null "${REPLICA_COUNT-}" || error "Replica count not populated: ${REPLICA_COUNT}"
 
+  local DEPLOYMENT_STATE=$(kubectl get deployment "${NAME}" -o json)
+  # TODO(ajm) set 10 minutes back to 1 hour
+  DATE_ONE_HOUR_AGO=$(date -d '10 minutes ago' --utc +%FT%TZ)
+  ALREADY_DEPLOYED=$(echo "${DEPLOYMENT_STATE}" \
+    | jq ".status.conditions []? \
+      | select(.type == \"Available\") \
+      | .lastTransitionTime < \"${DATE_ONE_HOUR_AGO}\"")
+
+  if [[ "${ALREADY_DEPLOYED}" == 'true' ]]; then
+    success "Application deployed for over ten minutes, skipping readiness check"
+    return 0
+  fi
+
+
   info "Waiting for available replicas on deployment ${NAME} for ready count of ${SUCCESS_COUNT}"
   until [[ "${READY_COUNT}" -gt "${SUCCESS_COUNT}" ]] || [[ "${DRY_RUN}" == 1 ]]; do
     COUNT=$((COUNT + 1))
-    local DEPLOYMENT_STATE=$(kubectl get deployment "${NAME}" -o json)
+    DEPLOYMENT_STATE=$(kubectl get deployment "${NAME}" -o json)
+
     STATE="$(echo "${DEPLOYMENT_STATE}" | jq -r '.status | "\(.conditions[].status) \(.availableReplicas) \(.unavailableReplicas)"')"
 
     if [[ ${READY_COUNT} == 1 ]] || [[ (${READY_COUNT} -gt 0 && $((READY_COUNT % 5)) == 0) ]]; then
