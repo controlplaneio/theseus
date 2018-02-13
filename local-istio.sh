@@ -60,10 +60,12 @@ main() {
   kubectl delete clusterrolebinding admin-access  || true
   kubectl delete clusterrolebinding admin-access-1 || true
   kubectl delete clusterrolebinding admin-access-2 || true
+  kubectl delete clusterrolebinding admin-access-3 || true
 
   kubectl create clusterrolebinding admin-access --clusterrole cluster-admin --user sublimino@gmail.com || true
   kubectl create clusterrolebinding admin-access-1 --clusterrole cluster-admin --user minikube || true
   kubectl create clusterrolebinding admin-access-2 --clusterrole cluster-admin --user k8s-deploy-bot@binarysludge-20170716-2.iam.gserviceaccount.com || true
+  kubectl create clusterrolebinding admin-access-3 --clusterrole cluster-admin --user system:serviceaccount:istio-system:default || true
 
   echo "deploying istio-system from ${ISTIO_DIR}"
   # cat "${ISTIO_DIR}"/install/kubernetes/istio.yaml | update_pull_policy | kubectl create -f -
@@ -80,8 +82,8 @@ main() {
   kubectl get service -n istio-system
 
 
-  echo "deploying bookinfo-slim resources"
-  istio_apply "${DIR}"/test/theseus/asset/bookinfo-slim.yaml
+  echo "deploying bookinfo resources"
+  istio_apply "${DIR}"/test/theseus/asset/bookinfo.yaml
 
   echo "deploying bookinfo-slim routerules"
   ROUTE_RULES="${DIR}"/test/theseus/asset/route-rule-all-v1.yaml
@@ -93,6 +95,24 @@ main() {
   ${ISTIOCTL} create -f "${ROUTE_RULES}"
 
   sleep 3
+
+  if [[ "${IS_MINIKUBE}" == 0 ]]; then
+
+    echo "Applying addons"
+
+    kubectl apply -f "${ISTIO_DIR}"/install/kubernetes/addons/prometheus.yaml
+    kubectl apply -f "${ISTIO_DIR}"/install/kubernetes/addons/grafana.yaml
+
+    if false; then
+      kubectl apply --namespace kube-system -f \
+        "https://cloud.weave.works/k8s/scope.yaml?k8s-version=$(kubectl version | base64 | tr -d '\n')" || true
+      kubectl port-forward -n kube-system "$(kubectl get -n kube-system pod \
+        --selector=weave-scope-component=app -o jsonpath='{.items..metadata.name}')" 4040 &
+      disown $! || true
+    fi
+  fi
+
+
 
   export GATEWAY_URL
 
@@ -122,13 +142,6 @@ main() {
 
   sleep 2
 
-  if false; then
-    kubectl apply --namespace kube-system -f \
-      "https://cloud.weave.works/k8s/scope.yaml?k8s-version=$(kubectl version | base64 | tr -d '\n')" || true
-    kubectl port-forward -n kube-system "$(kubectl get -n kube-system pod \
-      --selector=weave-scope-component=app -o jsonpath='{.items..metadata.name}')" 4040 &
-    disown $! || true
-  fi
 }
 
 istio_apply() {
@@ -238,6 +251,7 @@ cleanup_istio() {
   wait-safe "${PIDS[@]}"
 
   wait_for_no_pods istio
+  wait_for_no_namespace istio-system
 
   sleep 10
 }
@@ -247,6 +261,22 @@ wait_for_no_pods() {
   local TIMEOUT=30
   local COUNT=1
   while [[ $(kubectl get pods --all-namespaces -o name | grep -E "^pods/${POD}" --count) != 0 ]]; do
+    let COUNT=$((COUNT + 1))
+    [[ "$COUNT" -gt "${TIMEOUT}" ]] && {
+      echo "Timeout"
+      exit 1
+    }
+    sleep 1
+  done
+  echo "Wait complete in ${COUNT} seconds" >&2
+  sleep 1
+}
+
+wait_for_no_namespace() {
+  local NAMESPACE="${1}"
+  local TIMEOUT=120
+  local COUNT=1
+  while [[ $(kubectl get namespaces -o name | grep -E "^namespaces/${NAMESPACE}" --count) != 0 ]]; do
     let COUNT=$((COUNT + 1))
     [[ "$COUNT" -gt "${TIMEOUT}" ]] && {
       echo "Timeout"

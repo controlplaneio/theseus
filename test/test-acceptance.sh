@@ -112,10 +112,13 @@ main() {
       #      kubectl delete deployment reviews-v2 & PIDS="${PIDS} $!"
       #      kubectl delete deployment reviews-v3 & PIDS="${PIDS} $!"
 
-      istio-routerule-delete reviews &
+      istio-routerule-delete &
       PIDS="${PIDS} $!"
 
       wait_safe "${PIDS}"
+
+      istioctl create -f test/theseus/asset/route-rule-all-v1.yaml
+
       try-slow-backoff "curl -s http://${GATEWAY_URL}/productpage | grep Reviewer1"
 
     )
@@ -185,7 +188,7 @@ main() {
   }
 
   TEST_V2="test \$(curl -A 'Mozilla/4.0' --compressed --connect-timeout 5 \
-     --header 'cookie: choc-chip' \
+     --header 'cookie: user=jason' \
      --max-time 5  \"http://\${GATEWAY_URL}/productpage\" \
      | grep -o '\bglyphicon-star\b' \
      | wc -l) -ge 10"
@@ -201,7 +204,7 @@ main() {
   {
     ${APP} test/theseus/asset/reviews-deployment-v2.yaml \
       ${DEBUG_FLAG} \
-      --cookie choc-chip \
+      --cookie "^(.*?;)?(user=jason)(;.*)?$" \
       --test "${TEST_V2}"
     assert_success
   }
