@@ -2,7 +2,7 @@ pipeline {
   agent none // also forces each stage section contain its own agent section
 
   environment {
-    GCLOUD_AUTH_BASE64 = crentials('GCLOUD_AUTH_BASE64')
+    GCLOUD_AUTH_BASE64 = credentials('GCLOUD_AUTH_BASE64')
   }
 
   stages {
