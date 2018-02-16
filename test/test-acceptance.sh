@@ -99,8 +99,8 @@ main() {
       cd "${DIR}"/..
       PIDS=""
       local ISTIO_VERSION=$(find . -maxdepth 1 -name 'istio-*' -type d | sort --version-sort | head -n1)
-      kubectl delete -f <(istioctl kube-inject -f "${DIR}"/test/theseus/asset/bookinfo.yaml) || true
-      kubectl apply -f <(istioctl kube-inject -f "${DIR}"/test/theseus/asset/bookinfo-slim.yaml) || true
+      kubectl delete -f <(istioctl kube-inject -f "${DIR}"/theseus/asset/bookinfo.yaml) || true
+      kubectl apply -f <(istioctl kube-inject -f "${DIR}"/theseus/asset/bookinfo-slim.yaml) || true
 
       #      kubectl delete deployment reviews-v2 & PIDS="${PIDS} $!"
       #      kubectl delete deployment reviews-v3 & PIDS="${PIDS} $!"
