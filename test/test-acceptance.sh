@@ -244,7 +244,7 @@ try-limit() {
   local COUNT=1
   local RETURN_CODE
   shift
-  echo "Limit ${LIMIT}, trying: $*" | h '.*' 1>&2
+  echo "Limit ${LIMIT}, trying: $*" 1>&2
   until eval $(echo $@); do
     RETURN_CODE=$?
     printf "\n$(date): %s - " "$*" 1>&2
@@ -260,7 +260,7 @@ try-limit() {
     fi
   done
   RETURN_CODE=$?
-  echo "Completed after $COUNT iterations" | h '.*' 1>&2
+  echo "Completed after $COUNT iterations" 1>&2
   unset _TRY_LIMIT_SLEEP _TRY_LIMIT_BACKOFF
   return $RETURN_CODE
 }
