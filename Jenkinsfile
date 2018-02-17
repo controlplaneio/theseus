@@ -25,7 +25,9 @@ pipeline {
         PERSIST_CLUSTER = '1'
       }
       steps {
-        sh 'HOME=$(pwd); ./test/test-remote.sh'
+        sh "mkdir -p /tmp/jq/ && curl https://github.com/stedolan/jq/releases/download/jq-1.5/jq-linux64 -Lo /tmp/jq/jq && chmod +x /tmp/jq/jq;"
+
+        sh 'HOME=$(pwd); PATH="${PATH}:/tmp/jq/"; ./test/test-remote.sh; '
       }
     }
   }

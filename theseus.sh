@@ -741,6 +741,7 @@ get_key_from_resource() {
   info "Querying resource ${FILE} for ${SELECTOR}"
   local JSON=$(kubectl convert -f "${FILE}" --local=true -o json 2>/dev/null)
   local RESULT
+
   if echo "${JSON}" | is_multi_document_json; then
     local DOCUMENT_SELECTOR=".items[] | select(.kind == \"${RESOURCE_TYPE}\")"
     local DOCUMENT_COUNT=$(echo "${JSON}" | jq -r "${DOCUMENT_SELECTOR} | .kind" | wc -l)
@@ -772,6 +773,19 @@ handle_arguments() {
 
   parse_arguments "$@"
   validate_arguments "$@"
+  check_dependencies
+}
+
+check_dependencies() {
+  local DEPS=(jq ${*:-})
+
+  for DEP in "${DEPS[@]}"; do
+    if [[ -n "${DEP:-}" ]]; then
+      if ! command -v "${DEP}" &>/dev/null; then
+        error "${DEP} not found in path"
+      fi
+    fi
+  done
 }
 
 parse_arguments() {

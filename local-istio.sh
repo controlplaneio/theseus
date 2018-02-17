@@ -49,23 +49,7 @@ main() {
   fi
 
   cleanup_istio
-
-  # TODO(ajm): programmatically infer user
-  echo 'Creating temporary clusterrolebinding - remove when supported by istio'
-  kubectl delete clusterrolebinding "cluster-admin-$(whoami)"  || true
-  kubectl create clusterrolebinding "cluster-admin-$(whoami)" \
-    --clusterrole=cluster-admin \
-    --user="$(gcloud config get-value core/account)"
-
-  kubectl delete clusterrolebinding admin-access  || true
-  kubectl delete clusterrolebinding admin-access-1 || true
-  kubectl delete clusterrolebinding admin-access-2 || true
-  kubectl delete clusterrolebinding admin-access-3 || true
-
-  kubectl create clusterrolebinding admin-access --clusterrole cluster-admin --user sublimino@gmail.com || true
-  kubectl create clusterrolebinding admin-access-1 --clusterrole cluster-admin --user minikube || true
-  kubectl create clusterrolebinding admin-access-2 --clusterrole cluster-admin --user k8s-deploy-bot@binarysludge-20170716-2.iam.gserviceaccount.com || true
-  kubectl create clusterrolebinding admin-access-3 --clusterrole cluster-admin --user system:serviceaccount:istio-system:default || true
+cleanup_rolebindings
 
   echo "deploying istio-system from ${ISTIO_DIR}"
   # cat "${ISTIO_DIR}"/install/kubernetes/istio.yaml | update_pull_policy | kubectl create -f -
@@ -141,7 +125,6 @@ main() {
   fi
 
   sleep 2
-
 }
 
 istio_apply() {
@@ -254,6 +237,43 @@ cleanup_istio() {
   wait_for_no_namespace istio-system
 
   sleep 10
+}
+
+cleanup_rolebindings() {
+  PIDS=()
+
+  # TODO(ajm): programmatically infer user
+  echo 'Creating temporary clusterrolebinding - remove when supported by istio'
+  kubectl delete clusterrolebinding "cluster-admin-$(whoami)"  || true
+    PIDS+=($!)
+
+  kubectl create clusterrolebinding "cluster-admin-$(whoami)" \
+    --clusterrole=cluster-admin \
+    --user="$(gcloud config get-value core/account)"
+  PIDS+=($!)
+
+  kubectl delete clusterrolebinding admin-access  || true &
+  PIDS+=($!)
+  kubectl delete clusterrolebinding admin-access-1 || true &
+  PIDS+=($!)
+  kubectl delete clusterrolebinding admin-access-2 || true &
+  PIDS+=($!)
+  kubectl delete clusterrolebinding admin-access-3 || true &
+  PIDS+=($!)
+
+  kubectl create clusterrolebinding admin-access --clusterrole cluster-admin --user sublimino@gmail.com || true &
+  PIDS+=($!)
+  kubectl create clusterrolebinding admin-access-1 --clusterrole cluster-admin --user minikube || true &
+  PIDS+=($!)
+  kubectl create clusterrolebinding admin-access-2 --clusterrole cluster-admin --user k8s-deploy-bot@binarysludge-20170716-2.iam.gserviceaccount.com || true &
+  PIDS+=($!)
+  kubectl create clusterrolebinding admin-access-3 --clusterrole cluster-admin --user system:serviceaccount:istio-system:default || true &
+  PIDS+=($!)
+
+  PIDS+=($!)
+
+  wait-safe "${PIDS[@]}"
+
 }
 
 wait_for_no_pods() {
