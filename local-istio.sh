@@ -8,18 +8,33 @@ declare -r THIS_SCRIPT="${DIR}/$(basename "$0")"
 
 cd "${DIR}"
 
-ISTIO_DIR=$(find . -maxdepth 1 -type d -regex './istio-[0-9\.]+' | sort --version-sort | tail -n 1)
+ISTIO_DIR=$(find . -maxdepth 1 -type d -regex './istio-[0-9\.]+' \
+  | sort --version-sort \
+  | tail -n 1)
 ISTIOCTL="${DIR}/${ISTIO_DIR}/bin/istioctl"
 
 # this is for cleanup.sh
-if ! which istioctl &>/dev/null; then
-  export PATH="${PATH}:$(pwd)/${ISTIO_DIR}/bin"
-fi
+export PATH="${PATH}:$(pwd)/${ISTIO_DIR}/bin"
 
 main() {
-  LB_COUNT_TIMEOUT=15
+  LB_COUNT_TIMEOUT=30
   INGRESS_COUNT_TIMEOUT=30
 
+  preflight_checks
+
+  cleanup_istio
+  cleanup_rolebindings
+
+  deploy_istio_system
+  deploy_bookinfo
+  deploy_addons
+
+  poll_until_available
+
+  browser_open_productpage
+}
+
+preflight_checks() {
   if kubectl config current-context | grep -E '^gke_'; then
     IS_MINIKUBE=0
 
@@ -29,7 +44,6 @@ main() {
     check_is_gcloud_quota_ok
 
   else
-
     IS_MINIKUBE=1
     INGRESS_COUNT_TIMEOUT=50
 
@@ -38,38 +52,92 @@ main() {
 
     sleep 5
 
-    MINIKUBE_IMAGES=$(minikube ssh docker images | tail -n +2)
-    if [[ $(echo "${MINIKUBE_IMAGES}" | grep istio --count) -lt 5 ]]; then
-      for IMAGE in $(docker images | awk '/istio/{print $1}'); do
-        if ! echo "${MINIKUBE_IMAGES}" | grep -q "${IMAGE}"; then
-          minikube-import "${IMAGE}"
-        fi
-      done
-    fi
+    minikube_docker_load
   fi
+}
 
-  cleanup_istio
-cleanup_rolebindings
+minikube_docker_load() {
+  MINIKUBE_IMAGES=$(minikube ssh docker images | tail -n +2)
+  if [[ $(echo "${MINIKUBE_IMAGES}" | grep istio --count) -lt 5 ]]; then
+    for IMAGE in $(docker images | awk '/istio/{print $1}'); do
+      if ! echo "${MINIKUBE_IMAGES}" | grep -q "${IMAGE}"; then
+        minikube-import "${IMAGE}"
+      fi
+    done
+  fi
+}
 
+cleanup_istio() {
+  local PIDS=()
+  kubectl delete -f "${ISTIO_DIR}"/install/kubernetes/istio-auth.yaml || true &
+  PIDS+=($!)
+  kubectl delete -f "${ISTIO_DIR}"/install/kubernetes/istio.yaml || true &
+  PIDS+=($!)
+  "${ISTIO_DIR}"/samples/bookinfo/kube/cleanup.sh &
+  PIDS+=($!)
+  kubectl get crd -o 'jsonpath={.items[*].metadata.name}' | grep config\.istio\.io | xargs kubectl delete crd || true &
+  PIDS+=($!)
+
+  wait-safe "${PIDS[@]}"
+
+  sleep 10
+
+  wait_for_no_pods istio
+  wait_for_no_namespaces istio-system
+}
+
+cleanup_rolebindings() {
+  local PIDS=()
+
+  # TODO(ajm): programmatically infer user
+  echo 'Creating temporary clusterrolebinding - remove when supported by istio'
+  kubectl delete clusterrolebinding "cluster-admin-$(whoami)" || true
+  PIDS+=($!)
+
+  kubectl create clusterrolebinding "cluster-admin-$(whoami)" \
+    --clusterrole=cluster-admin \
+    --user="$(gcloud config get-value core/account)"
+  PIDS+=($!)
+
+  kubectl delete clusterrolebinding admin-access || true &
+  PIDS+=($!)
+  kubectl delete clusterrolebinding admin-access-1 || true &
+  PIDS+=($!)
+  kubectl delete clusterrolebinding admin-access-2 || true &
+  PIDS+=($!)
+  kubectl delete clusterrolebinding admin-access-3 || true &
+  PIDS+=($!)
+
+  kubectl create clusterrolebinding admin-access --clusterrole cluster-admin --user sublimino@gmail.com || true &
+  PIDS+=($!)
+  kubectl create clusterrolebinding admin-access-1 --clusterrole cluster-admin --user minikube || true &
+  PIDS+=($!)
+  kubectl create clusterrolebinding admin-access-2 --clusterrole cluster-admin --user k8s-deploy-bot@binarysludge-20170716-2.iam.gserviceaccount.com || true &
+  PIDS+=($!)
+  kubectl create clusterrolebinding admin-access-3 --clusterrole cluster-admin --user system:serviceaccount:istio-system:default || true &
+  PIDS+=($!)
+
+  PIDS+=($!)
+
+  wait-safe "${PIDS[@]}"
+}
+
+deploy_istio_system() {
   echo "deploying istio-system from ${ISTIO_DIR}"
-  # cat "${ISTIO_DIR}"/install/kubernetes/istio.yaml | update_pull_policy | kubectl create -f -
-  kubectl apply -f "${ISTIO_DIR}"/install/kubernetes/istio-auth.yaml
+  cat "${ISTIO_DIR}"/install/kubernetes/istio-auth.yaml \
+    | update_pull_policy \
+    | kubectl create -f -
 
-  # TODO(ajm): probably not needed since 0.2.4?
-  # echo "generating TLS secrets"
-  # (yes '' || true) | openssl req -x509 -nodes -days 365 -newkey rsa:2048 -keyout /tmp/tls.key -out /tmp/tls.crt
-  # kubectl -n istio-system delete secret ingress-certs || true
-  # kubectl -n istio-system create secret tls ingress-certs --key /tmp/tls.key --cert /tmp/tls.crt
-
-  sleep 30
+#  sleep 30
 
   kubectl get service -n istio-system
+}
 
-
+deploy_bookinfo() {
   echo "deploying bookinfo resources"
   istio_apply "${DIR}"/test/theseus/asset/bookinfo.yaml
 
-  echo "deploying bookinfo-slim routerules"
+  echo "deploying bookinfo routerules"
   ROUTE_RULES="${DIR}"/test/theseus/asset/route-rule-all-v1.yaml
   for RULE in $(awk '/name:/{ print $2 }' "${ROUTE_RULES}"); do
     if [[ $(${ISTIOCTL} get routerule "${RULE}") != 'No resources found.' ]]; then
@@ -79,7 +147,9 @@ cleanup_rolebindings
   ${ISTIOCTL} create -f "${ROUTE_RULES}"
 
   sleep 3
+}
 
+deploy_addons() {
   if [[ "${IS_MINIKUBE}" == 0 ]]; then
 
     echo "Applying addons"
@@ -95,9 +165,9 @@ cleanup_rolebindings
       disown $! || true
     fi
   fi
+}
 
-
-
+poll_until_available() {
   export GATEWAY_URL
 
   if [[ "${IS_MINIKUBE}" == 1 ]]; then
@@ -119,12 +189,12 @@ cleanup_rolebindings
   wait_for_productpage
 
   sleep 2
+}
 
+browser_open_productpage() {
   if command -v xdg-open &>/dev/null; then
     xdg-open "http://${GATEWAY_URL}/productpage"
   fi
-
-  sleep 2
 }
 
 istio_apply() {
@@ -134,8 +204,7 @@ istio_apply() {
 }
 
 update_pull_policy() {
-  # sed 's/imagePullPolicy: Always/imagePullPolicy: IfNotPresent/g ; s/"imagePullPolicy":"Always"/"imagePullPolicy":"IfNotPresent"/g'
-  cat
+  sed 's/imagePullPolicy: Always/imagePullPolicy: IfNotPresent/g ; s/"imagePullPolicy":"Always"/"imagePullPolicy":"IfNotPresent"/g'
 }
 
 wait_for_productpage() {
@@ -220,92 +289,36 @@ check_is_test_cluster() {
   fi
 }
 
-cleanup_istio() {
-  PIDS=()
-  kubectl delete -f "${ISTIO_DIR}"/install/kubernetes/istio-auth.yaml || true &
-  PIDS+=($!)
-  kubectl delete -f "${ISTIO_DIR}"/install/kubernetes/istio.yaml || true &
-  PIDS+=($!)
-  "${ISTIO_DIR}"/samples/bookinfo/kube/cleanup.sh &
-  PIDS+=($!)
-  kubectl get crd -o 'jsonpath={.items[*].metadata.name}' | grep config\.istio\.io | xargs kubectl delete crd || true &
-  PIDS+=($!)
-
-  wait-safe "${PIDS[@]}"
-
-  wait_for_no_pods istio
-  wait_for_no_namespace istio-system
-
-  sleep 10
-}
-
-cleanup_rolebindings() {
-  PIDS=()
-
-  # TODO(ajm): programmatically infer user
-  echo 'Creating temporary clusterrolebinding - remove when supported by istio'
-  kubectl delete clusterrolebinding "cluster-admin-$(whoami)"  || true
-    PIDS+=($!)
-
-  kubectl create clusterrolebinding "cluster-admin-$(whoami)" \
-    --clusterrole=cluster-admin \
-    --user="$(gcloud config get-value core/account)"
-  PIDS+=($!)
-
-  kubectl delete clusterrolebinding admin-access  || true &
-  PIDS+=($!)
-  kubectl delete clusterrolebinding admin-access-1 || true &
-  PIDS+=($!)
-  kubectl delete clusterrolebinding admin-access-2 || true &
-  PIDS+=($!)
-  kubectl delete clusterrolebinding admin-access-3 || true &
-  PIDS+=($!)
-
-  kubectl create clusterrolebinding admin-access --clusterrole cluster-admin --user sublimino@gmail.com || true &
-  PIDS+=($!)
-  kubectl create clusterrolebinding admin-access-1 --clusterrole cluster-admin --user minikube || true &
-  PIDS+=($!)
-  kubectl create clusterrolebinding admin-access-2 --clusterrole cluster-admin --user k8s-deploy-bot@binarysludge-20170716-2.iam.gserviceaccount.com || true &
-  PIDS+=($!)
-  kubectl create clusterrolebinding admin-access-3 --clusterrole cluster-admin --user system:serviceaccount:istio-system:default || true &
-  PIDS+=($!)
-
-  PIDS+=($!)
-
-  wait-safe "${PIDS[@]}"
-
-}
 
 wait_for_no_pods() {
-  local POD="${1}"
-  local TIMEOUT=30
-  local COUNT=1
-  while [[ $(kubectl get pods --all-namespaces -o name | grep -E "^pods/${POD}" --count) != 0 ]]; do
-    let COUNT=$((COUNT + 1))
-    [[ "$COUNT" -gt "${TIMEOUT}" ]] && {
-      echo "Timeout"
-      exit 1
-    }
-    sleep 1
-  done
-  echo "Wait complete in ${COUNT} seconds" >&2
-  sleep 1
+  wait_for_no_resource pods "${1}"
 }
 
-wait_for_no_namespace() {
-  local NAMESPACE="${1}"
-  local TIMEOUT=120
+wait_for_no_namespaces() {
+  wait_for_no_resource namespace "${1}" 120
+}
+
+wait_for_no_resource() {
+  local RESOURCE_TYPE="${1%s}s"
+  local RESOURCE_INSTANCE_NAME="${2}"
+  local TIMEOUT="${3:-60}"
   local COUNT=1
-  while [[ $(kubectl get namespaces -o name | grep -E "^namespaces/${NAMESPACE}" --count) != 0 ]]; do
+  local ALL_NAMESPACES_FLAG="--all-namespaces"
+  if [[ "${RESOURCE_TYPE}" =~ ^namespaces?$ ]]; then
+    ALL_NAMESPACES_FLAG=""
+  fi
+  while [[ $(kubectl get "${RESOURCE_TYPE}" ${ALL_NAMESPACES_FLAG} -o name \
+    | grep -E "^${RESOURCE_TYPE}/${RESOURCE_INSTANCE_NAME}" --count) != 0 ]]; do
+
     let COUNT=$((COUNT + 1))
     [[ "$COUNT" -gt "${TIMEOUT}" ]] && {
-      echo "Timeout"
+      echo "Timeout waiting for no '${RESOURCE_TYPE}' matching '${RESOURCE_INSTANCE_NAME}'" >&2
       exit 1
     }
     sleep 1
   done
-  echo "Wait complete in ${COUNT} seconds" >&2
-  sleep 1
+  echo "Wait for '${RESOURCE_TYPE}' matching '${RESOURCE_INSTANCE_NAME}' complete in ${COUNT} seconds" >&2
+  sleep 3
 }
 
 wait-safe() {

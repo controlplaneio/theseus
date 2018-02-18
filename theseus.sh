@@ -581,6 +581,11 @@ test_resource() {
 ${TEST_EVAL:-}
 EOF
   )
+
+  if [[ "${INTERPOLATED_TEST_EVAL}" == "" ]]; then
+    error "Interpolated test command is empty"
+  fi
+
   success "Interpolated test command is: ${INTERPOLATED_TEST_EVAL}"
 
   for BACKOFF in $(seq 1 ${MAX_ATTEMPTS}); do
@@ -777,7 +782,7 @@ handle_arguments() {
 }
 
 check_dependencies() {
-  local DEPS=(jq ${*:-})
+  local DEPS=(jq envsubst ${*:-})
 
   for DEP in "${DEPS[@]}"; do
     if [[ -n "${DEP:-}" ]]; then
@@ -927,17 +932,17 @@ success() {
 
 info() {
   [ "${@:-}" ] && INFO="$@" || INFO="Unknown Info"
-  printf "$(log_message_prefix)${COLOUR_WHITE}%s${COLOUR_RESET}\n" "${INFO}" | tee -a "${DIR}"/debug.log
+  printf "$(log_message_prefix)${COLOUR_WHITE}INFO: %s${COLOUR_RESET}\n" "${INFO}" | tee -a "${DIR}"/debug.log
 } 1>&2
 
 warning() {
   [ "${@:-}" ] && ERROR="$@" || ERROR="Unknown Warning"
-  printf "$(log_message_prefix)${COLOUR_RED}%s${COLOUR_RESET}\n" "${ERROR}" | tee -a "${DIR}"/debug.log
+  printf "$(log_message_prefix)${COLOUR_RED}WARN: %s${COLOUR_RESET}\n" "${ERROR}" | tee -a "${DIR}"/debug.log
 } 1>&2
 
 error() {
   [ "${@:-}" ] && ERROR="$@" || ERROR="Unknown Error"
-  printf "$(log_message_prefix)${COLOUR_RED}%s${COLOUR_RESET}\n" "${ERROR}" | tee -a "${DIR}"/debug.log
+  printf "$(log_message_prefix)${COLOUR_RED}ERROR: %s${COLOUR_RESET}\n" "${ERROR}" | tee -a "${DIR}"/debug.log
   exit 3
 } 1>&2
 
