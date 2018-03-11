@@ -68,12 +68,17 @@ get_master_versions() {
 deploy_cluster() {
   local OUTPUT
   local CLUSTER_VERSION=$(gcloud container get-server-config | grep 'validMasterVersions:' -A 1 | awk '/^- /{print $2}')
-  if ! OUTPUT=$( (yes || true) | gcloud container clusters create "${CLUSTER_NAME}" \
+  if ! OUTPUT=$( (yes || true) \
+    | gcloud container clusters create "${CLUSTER_NAME}" \
     --machine-type n1-highcpu-16 \
     --enable-autorepair \
-    --no-enable-legacy-authorization \
+    \
+    --enable-kubernetes-alpha \
     --enable-network-policy \
+    --no-enable-legacy-authorization \
+    \
     ${PREEMPTIBLE} \
+    \
     --cluster-version=${CLUSTER_VERSION} \
     --num-nodes 2 2>&1); then
 

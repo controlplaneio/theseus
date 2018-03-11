@@ -75,8 +75,12 @@ cleanup_istio() {
   PIDS+=($!)
   "${ISTIO_DIR}"/samples/bookinfo/kube/cleanup.sh &
   PIDS+=($!)
-  kubectl get crd -o 'jsonpath={.items[*].metadata.name}' | grep config\.istio\.io | xargs kubectl delete crd || true &
+  kubectl get crd -o 'jsonpath={.items[*].metadata.name}' | grep config\.istio\.io | xargs --no-run-if-empty kubectl delete crd || true &
   PIDS+=($!)
+
+  kubectl delete namespace istio-system || true &
+  PIDS+=($!)
+
 
   wait-safe "${PIDS[@]}"
 
