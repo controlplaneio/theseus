@@ -8,17 +8,18 @@ declare -r THIS_SCRIPT="${DIR}/$(basename "$0")"
 
 cd "${DIR}"
 
-ISTIO_DIR=$(find . -maxdepth 1 -type d -regex './istio-[0-9\.]+' \
+ISTIO_DIR=$(find . -maxdepth 1 -type d -regex './istio-[release-]*.*' \
   | sort --version-sort \
   | tail -n 1)
 ISTIOCTL="${DIR}/${ISTIO_DIR}/bin/istioctl"
 
 # this is for cleanup.sh
 export PATH="${PATH}:$(pwd)/${ISTIO_DIR}/bin"
+DEFAULT_ZONE="${DEFAULT_ZONE:-europe-west2-a}"
 
 main() {
-  LB_COUNT_TIMEOUT=30
-  INGRESS_COUNT_TIMEOUT=30
+  LB_COUNT_TIMEOUT=75
+  INGRESS_COUNT_TIMEOUT=75
 
   preflight_checks
 
@@ -69,9 +70,9 @@ minikube_docker_load() {
 
 cleanup_istio() {
   local PIDS=()
-  kubectl delete -f "${ISTIO_DIR}"/install/kubernetes/istio-auth.yaml || true &
+  kubectl delete -f "${ISTIO_DIR}"/install/kubernetes/istio-demo-auth.yaml || true &
   PIDS+=($!)
-  kubectl delete -f "${ISTIO_DIR}"/install/kubernetes/istio.yaml || true &
+  kubectl delete -f "${ISTIO_DIR}"/install/kubernetes/istio-demo.yaml || true &
   PIDS+=($!)
   "${ISTIO_DIR}"/samples/bookinfo/kube/cleanup.sh &
   PIDS+=($!)
@@ -79,6 +80,15 @@ cleanup_istio() {
   PIDS+=($!)
 
   kubectl delete namespace istio-system || true &
+  PIDS+=($!)
+
+
+  helm template "${ISTIO_DIR}"/install/kubernetes/helm/istio --name istio --namespace istio-system \
+  | kubectl delete -f - || true &
+  PIDS+=($!)
+  kubectl -n istio-system delete job --all || true &
+  PIDS+=($!)
+  kubectl delete -f "${ISTIO_DIR}"/install/kubernetes/helm/istio/templates/crds.yaml -n istio-system || true &
   PIDS+=($!)
 
 
@@ -90,6 +100,14 @@ cleanup_istio() {
   wait_for_no_namespaces istio-system
 }
 
+check_for_zone() {
+  gcloud config get-value compute/zone
+  if [[ $(gcloud config get-value compute/zone) == '' ]]; then
+    export CLOUDSDK_COMPUTE_ZONE="${DEFAULT_ZONE}"
+  fi
+  true
+}
+
 cleanup_rolebindings() {
   local PIDS=()
 
@@ -97,6 +115,8 @@ cleanup_rolebindings() {
   echo 'Creating temporary clusterrolebinding - remove when supported by istio'
   kubectl delete clusterrolebinding "cluster-admin-$(whoami)" || true
   PIDS+=($!)
+
+  check_for_zone
 
   kubectl create clusterrolebinding "cluster-admin-$(whoami)" \
     --clusterrole=cluster-admin \
@@ -124,36 +144,79 @@ cleanup_rolebindings() {
   PIDS+=($!)
 
   wait-safe "${PIDS[@]}"
+
+
 }
 
 deploy_istio_system() {
   echo "deploying istio-system from ${ISTIO_DIR}"
-  cat "${ISTIO_DIR}"/install/kubernetes/istio-auth.yaml \
-    | update_pull_policy \
-    | kubectl create -f -
 
-#  sleep 30
+  until kubectl create namespace istio-system; do
+    printf .
+    sleep 1
+  done
+
+  kubectl label namespace default \
+    istio-injection=enabled \
+    --overwrite
+
+  kubectl apply -f "${ISTIO_DIR}"/install/kubernetes/helm/istio/templates/crds.yaml
+  kubectl apply -f "${ISTIO_DIR}"/install/kubernetes/helm/istio/charts/certmanager/templates/crds.yaml
+
+
+  local HELM=0
+
+  if [[ "${HELM:-}" == 1 ]]; then
+
+    helm template "${ISTIO_DIR}"/install/kubernetes/helm/istio \
+      --name istio \
+      --namespace istio-system \
+      \
+        --set security.enabled=true \
+        --set ingress.enabled=true \
+        --set gateways.istio-ingressgateway.enabled=true \
+        --set gateways.istio-egressgateway.enabled=true \
+        --set galley.enabled=true \
+        --set sidecarInjectorWebhook.enabled=true \
+        --set mixer.enabled=true \
+        --set prometheus.enabled=true \
+        --set global.proxy.envoyStatsd.enabled=true \
+        --set pilot.sidecar=true \
+      \
+      | update_pull_policy \
+      | kubectl apply -f -
+
+  else
+    kubectl apply -f "${ISTIO_DIR}"/install/kubernetes/istio-demo-auth.yaml
+  fi
+
+  sleep 5
 
   kubectl get service -n istio-system
 }
 
 deploy_bookinfo() {
   echo "deploying bookinfo resources"
-  istio_apply "${DIR}"/test/theseus/asset/bookinfo.yaml
+#  istio_apply "${DIR}"/test/theseus/asset/bookinfo.yaml
 
-  echo "deploying bookinfo routerules"
-  ROUTE_RULES="${DIR}"/test/theseus/asset/route-rule-all-v1.yaml
-  for RULE in $(awk '/name:/{ print $2 }' "${ROUTE_RULES}"); do
-    if [[ $(${ISTIOCTL} get routerule "${RULE}") != 'No resources found.' ]]; then
-      ${ISTIOCTL} delete routerule "${RULE}"
-    fi
-  done
-  ${ISTIOCTL} create -f "${ROUTE_RULES}"
+  istio_apply "${ISTIO_DIR}"/samples/bookinfo/platform/kube/bookinfo.yaml
+  istio_apply "${ISTIO_DIR}"/samples/bookinfo/networking/bookinfo-gateway.yaml
+
+  # TODO: confirm these are correct
+
+  echo "deploying bookinfo destination rules"
+  kubectl delete -f "${ISTIO_DIR}"/samples/bookinfo/networking/destination-rule-all-mtls.yaml || true
+  sleep 2
+  kubectl create -f "${ISTIO_DIR}"/samples/bookinfo/networking/destination-rule-all-mtls.yaml
+
+  kubectl create -f "${ISTIO_DIR}"/samples/bookinfo/networking/virtual-service-all-v1.yaml
 
   sleep 3
 }
 
 deploy_addons() {
+  return 0
+
   if [[ "${IS_MINIKUBE}" == 0 ]]; then
 
     echo "Applying addons"
@@ -171,7 +234,7 @@ deploy_addons() {
   fi
 }
 
-poll_until_available() {
+get_gateway_url() {
   export GATEWAY_URL
 
   if [[ "${IS_MINIKUBE}" == 1 ]]; then
@@ -183,12 +246,18 @@ poll_until_available() {
         istio-ingress \
         -o 'jsonpath={.spec.ports[0].nodePort}')
   else
-    GATEWAY_URL=$(kubectl get ingress gateway \
-      -o 'jsonpath={.status.loadBalancer.ingress[].ip}')
+    GATEWAY_URL=$(kubectl \
+      -n istio-system \
+      get service istio-ingressgateway \
+      -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
     wait_for_ingress_ip
   fi
 
   [[ -n ${GATEWAY_URL} ]]
+}
+
+poll_until_available() {
+  get_gateway_url
 
   wait_for_productpage
 
@@ -212,7 +281,7 @@ update_pull_policy() {
 }
 
 wait_for_productpage() {
-  COUNT=0
+  local COUNT=0
   until [[ $(curl \
     --max-time 5 \
     -o /dev/null \
@@ -259,7 +328,7 @@ wait_for_ingress_ip() {
       exit 1
     }
     sleep $((5 * (COUNT + 10) / 10))
-    GATEWAY_URL=$(kubectl get ingress gateway -o 'jsonpath={.status.loadBalancer.ingress[].ip}')
+    get_gateway_url
   done
 }
 

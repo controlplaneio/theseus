@@ -50,9 +50,9 @@ build:
 		HASH="$$(git rev-parse --short HEAD)"; \
 		VERSION="$$(git describe --tags 2>/dev/null|| echo $${HASH})$${STATUS}"; \
 		go build -ldflags "\
-			-X $${PACKAGE}.buildStamp=$$(date -u '+%Y-%m-%d_%I:%M:%S%p') \
-			-X $${PACKAGE}.gitHash=$${HASH} \
-			-X $${PACKAGE}.buildVersion=$${VERSION} \
+			-X $${PACKAGE}/cmd.buildStamp=$$(date -u '+%Y-%m-%d_%I:%M:%S%p') \
+			-X $${PACKAGE}/cmd.gitHash=$${HASH} \
+			-X $${PACKAGE}/cmd.buildVersion=$${VERSION} \
 		"; \
 	'
 

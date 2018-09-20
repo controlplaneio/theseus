@@ -16,9 +16,11 @@ declare -r DIR=$(cd "$(dirname "$0")" && pwd)
 declare -r THIS_SCRIPT="${DIR}/$(basename "$0")"
 
 CLUSTER_NAME="${CLUSTER_NAME:-test-theseus}"
-DEFAULT_PROJECT="${DEFAULT_PROJECT:-binarysludge-20170716-2}"
+DEFAULT_PROJECT="${DEFAULT_PROJECT:-controlplane-dev-2}"
 DEFAULT_ZONE="${DEFAULT_ZONE:-europe-west2-a}"
 PREEMPTIBLE="${PREEMPTIBLE:- --preemptible}"
+NUM_NODES="5"
+MACHINE_TYPE="n1-highcpu-16"
 
 check_for_gcloud() {
   if ! command gcloud &>/dev/null; then
@@ -70,17 +72,24 @@ deploy_cluster() {
   local CLUSTER_VERSION=$(gcloud container get-server-config | grep 'validMasterVersions:' -A 1 | awk '/^- /{print $2}')
   if ! OUTPUT=$( (yes || true) \
     | gcloud container clusters create "${CLUSTER_NAME}" \
-    --machine-type n1-highcpu-16 \
-    --enable-autorepair \
     \
-    --enable-kubernetes-alpha \
-    --enable-network-policy \
-    --no-enable-legacy-authorization \
+    --machine-type ${MACHINE_TYPE} \
+    --num-nodes ${NUM_NODES} \
+    --cluster-version=${CLUSTER_VERSION} \
     \
     ${PREEMPTIBLE} \
     \
-    --cluster-version=${CLUSTER_VERSION} \
-    --num-nodes 2 2>&1); then
+    --maintenance-window=04:42
+    --enable-network-policy \
+    --no-enable-legacy-authorization \
+    \
+    --enable-autoscaling \
+    --max-nodes=$((NUM_NODES * 2)) \
+    \
+    --enable-master-authorized-networks \
+    --master-authorized-networks=0.0.0.0/0 \
+    \
+    2>&1); then
 
     if echo "${OUTPUT}" | grep -E 'Version [0-9\.\"]+ is invalid.' &>/dev/null; then
       local MASTER_VERSIONS=$(get_master_versions)
@@ -117,9 +126,29 @@ deploy_cluster() {
 
   gcloud container clusters get-credentials "${CLUSTER_NAME}"
 
-  kubectl delete clusterrolebinding cluster-admin-binding || true
-  sleep 2
-  kubectl create clusterrolebinding cluster-admin-binding --clusterrole=cluster-admin --user="$(gcloud config get-value core/account)"
+  kubectl get clusterrolebinding cluster-admin-binding || kubectl create clusterrolebinding cluster-admin-binding \
+    --clusterrole cluster-admin --user "$(gcloud config get-value account)"
+
+  gcloud beta container clusters update "${CLUSTER_NAME}" --monitoring-service monitoring.googleapis.com
+  kubectl create -f https://raw.githubusercontent.com/GoogleCloudPlatform/k8s-stackdriver/master/custom-metrics-stackdriver-adapter/deploy/production/adapter.yaml || true
+
+  # add kubernetes admin to gcloud default service account
+  local PROJECT_NAME PROJECT_ID GKE_DEFAULT_SERVICE_ACCOUNT
+  PROJECT_NAME=$(gcloud config get-value project)
+  PROJECT_ID=$(gcloud projects list | awk "/${PROJECT_NAME}/{print \$3}")
+  GKE_DEFAULT_SERVICE_ACCOUNT="${PROJECT_ID}-compute@developer.gserviceaccount.com"
+
+  gcloud projects \
+    add-iam-policy-binding \
+    ${PROJECT_NAME} \
+      --member serviceAccount:${GKE_DEFAULT_SERVICE_ACCOUNT} \
+      --role roles/container.clusterAdmin
+
+  gcloud projects \
+    add-iam-policy-binding \
+    ${PROJECT_NAME} \
+      --member serviceAccount:${GKE_DEFAULT_SERVICE_ACCOUNT} \
+      --role roles/container.admin
 }
 
 delete_cluster() {
@@ -217,7 +246,7 @@ cleanup() {
       | xargs --no-run-if-empty -I{} bash -c "(yes || true) | gcloud compute firewall-rules delete {}"
 
     gcloud compute routes list \
-      | awk "/^gke-test-theseus/{print \$1}" \
+      | awk "/^gke-${CLUSTER_NAME}/{print \$1}" \
       | sort -u \
       | xargs --no-run-if-empty -n1 -I{} bash -c "(yes || true) | gcloud compute routes delete"
 
